@@ -1,0 +1,7 @@
+# Reference repositories (external git repos)
+.refs/*
+
+# BUT track the index and README
+!.refs/INDEX.yaml
+!.refs/README.md
+!.refs/clone.sh

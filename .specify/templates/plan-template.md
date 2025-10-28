@@ -31,7 +31,58 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+### Architecture Compliance (Principle 1)
+- [ ] Feature follows layered EDA: Ingestion → Message Bus → Analytics → Cache → MCP
+- [ ] Uses Redis Streams with consumer groups and XACK acknowledgment
+- [ ] Respects single stream key topology (`nt:binance` for MVP)
+
+### Message Bus Contract (Principle 2)
+- [ ] All events use JSON format with `snake_case` fields
+- [ ] Mandatory fields present: `symbol`, `venue`, `type`, `ts_event`, `payload`
+- [ ] Event types limited to MVP-allowed: `trade_tick`, `order_book_depth|deltas`, `ticker_24h`
+
+### Idempotency & Time (Principle 3)
+- [ ] All event handlers are idempotent (safe for replay/retry)
+- [ ] All timestamps in UTC (RFC3339), converted at layer boundaries
+
+### Technology Stack (Principle 4)
+- [ ] Analytics/backend services implemented in Go ≥ 1.24
+- [ ] Python dependencies locked in `poetry.lock` or `requirements.txt`
+
+### Report Contract (Principle 6)
+- [ ] Report includes all mandatory fields: identification, 24h stats, L1/spread, depth, liquidity, flows, anomalies, health
+- [ ] All calculation formulas documented in `/docs/metrics.md`
+- [ ] `report_version` follows semantic versioning
+
+### SLO Compliance (Principle 7)
+- [ ] Feature supports `data_age_ms ≤ 1000` for healthy status
+- [ ] Report generation design targets ≤ 250 ms on warm cache
+- [ ] Graceful degradation implemented for data source failures
+
+### Security (Principle 8)
+- [ ] No secrets in code or repository (use `.env` or vault)
+- [ ] MCP endpoints remain read-only (no side effects)
+- [ ] Complies with Binance API Terms of Service
+
+### Quality & Testing (Principle 9)
+- [ ] Unit tests for all calculation logic
+- [ ] Property-based tests for metric formulas
+- [ ] MCP contract tests (schema + timeout validation)
+- [ ] JSON schemas defined for events and reports
+
+### Reference-First Development (Principle 10)
+- [ ] `.refs/INDEX.yaml` consulted for relevant integrations/libraries
+- [ ] Reference repository patterns used (e.g., go-redis for streams, go-binance for WebSocket)
+- [ ] Deviations from reference patterns documented in code comments
+- [ ] PRs document which reference repositories were consulted
+
+### Observability (Principle 11)
+- [ ] Structured JSON logging with: `component`, `symbol`, `lag_ms`, `stream_id`
+
+### MCP Contract (Principle 13)
+- [ ] MCP method signature: `get_report(symbol: string) -> ReportJSON | null`
+- [ ] Response sourced from cache only (no computation triggered)
+- [ ] Timeout ≤ 150 ms enforced
 
 ## Project Structure
 

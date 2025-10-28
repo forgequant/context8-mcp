@@ -1,0 +1,359 @@
+# Reference Repository Index
+# This index MUST be consulted before implementing any integration, library usage, or architectural pattern
+# Last updated: 2025-10-28
+
+version: 1.0.0
+purpose: |
+  Catalog of reference repositories with working code examples for the context8-mcp project.
+  Mandatory consultation before writing integration code, using libraries, or implementing patterns.
+
+categories:
+
+  # ============================================================================
+  # EXCHANGE INTEGRATIONS
+  # ============================================================================
+
+  - name: Exchange Integrations
+    description: Binance API client libraries and documentation
+    mandatory_for:
+      - Implementing Binance REST API calls
+      - WebSocket subscription patterns
+      - Order book subscription
+      - Trade tick ingestion
+    repositories:
+
+      - path: binance-connector-go
+        language: Go
+        purpose: Official Binance connector for Go
+        use_cases:
+          - REST API authentication patterns
+          - Rate limiting implementation
+          - Error handling for exchange API
+        key_files:
+          - "examples/websocket/*"
+          - "examples/spot/*"
+
+      - path: go-binance
+        language: Go
+        purpose: Third-party Binance Go SDK
+        use_cases:
+          - WebSocket stream handling
+          - Depth snapshot + delta updates
+          - Reconnection logic
+        key_files:
+          - "v2/websocket_*.go"
+          - "v2/depth_service.go"
+
+      - path: binance-spot-api-docs
+        language: Documentation
+        purpose: Official Binance Spot API documentation
+        use_cases:
+          - Understanding API contracts
+          - Rate limits and restrictions
+          - WebSocket stream specifications
+        key_files:
+          - "web-socket-streams.md"
+          - "rest-api.md"
+
+  # ============================================================================
+  # REDIS & STREAMS
+  # ============================================================================
+
+  - name: Redis Streams & Cache
+    description: Redis client libraries and stream processing patterns
+    mandatory_for:
+      - Redis Streams producer/consumer implementation
+      - Consumer groups setup
+      - XACK acknowledgment patterns
+      - Cache operations
+    repositories:
+
+      - path: go-redis
+        language: Go
+        purpose: Official Go Redis client (v9+)
+        use_cases:
+          - Redis Streams XREAD/XADD
+          - Consumer groups (XGROUP CREATE/XREADGROUP)
+          - Connection pooling
+          - Pipeline operations
+        key_files:
+          - "stream_commands.go"
+          - "example/redis-stream/*"
+          - "redis.go"
+
+      - path: redis
+        language: C
+        purpose: Redis server source code
+        use_cases:
+          - Understanding Streams internals
+          - Configuration best practices
+          - Memory optimization
+        key_files:
+          - "src/stream.h"
+          - "redis.conf"
+
+      - path: miniredis
+        language: Go
+        purpose: Pure Go Redis server for testing
+        use_cases:
+          - Unit testing without real Redis
+          - Stream operations testing
+          - Consumer group tests
+        key_files:
+          - "cmd_stream.go"
+          - "integration/*"
+
+  # ============================================================================
+  # MESSAGE BROKERS (ALTERNATIVE REFERENCES)
+  # ============================================================================
+
+  - name: Message Brokers
+    description: Alternative message broker patterns (NATS, Kafka)
+    mandatory_for:
+      - Understanding pub/sub patterns
+      - Consumer group alternatives
+      - At-least-once delivery semantics
+    repositories:
+
+      - path: nats.go
+        language: Go
+        purpose: NATS Go client
+        use_cases:
+          - JetStream consumer patterns
+          - Acknowledgment handling
+          - Reconnection strategies
+        key_files:
+          - "jetstream.go"
+          - "example/*"
+
+      - path: go-nats-examples
+        language: Go
+        purpose: NATS usage examples
+        use_cases:
+          - Stream subscription patterns
+          - Pull vs push consumers
+
+      - path: kafka-go
+        language: Go
+        purpose: Kafka Go client
+        use_cases:
+          - Consumer group patterns
+          - Offset management
+          - Rebalancing strategies
+        key_files:
+          - "reader.go"
+          - "examples/*"
+
+      - path: kafka-go-examples
+        language: Go
+        purpose: Kafka usage examples
+
+      - path: sarama
+        language: Go
+        purpose: Alternative Kafka Go client
+        use_cases:
+          - Consumer group implementation
+          - Partition assignment
+
+  # ============================================================================
+  # MCP (MODEL CONTEXT PROTOCOL)
+  # ============================================================================
+
+  - name: MCP Integration
+    description: Model Context Protocol server implementations
+    mandatory_for:
+      - Implementing MCP server
+      - Tool registration
+      - JSON-RPC protocol handling
+    repositories:
+
+      - path: mcp-go
+        language: Go
+        purpose: MCP SDK for Go
+        use_cases:
+          - Server implementation patterns
+          - Tool definition
+          - Request/response handling
+        key_files:
+          - "server/*.go"
+          - "examples/*"
+
+      - path: go-sdk
+        language: Go
+        purpose: MCP Go SDK (alternative)
+        use_cases:
+          - SDK usage patterns
+          - Client/server implementations
+
+      - path: servers
+        language: Multiple
+        purpose: Reference MCP server implementations
+        use_cases:
+          - Real-world MCP server examples
+          - Tool implementation patterns
+
+  # ============================================================================
+  # MARKET DATA & TRADING
+  # ============================================================================
+
+  - name: Market Data Processing
+    description: Trading data ingestion and market microstructure
+    mandatory_for:
+      - NautilusTrader integration
+      - Market microstructure calculations
+      - Order book processing
+    repositories:
+
+      - path: nautilus_trader
+        language: Python/Rust
+        purpose: Trading platform with exchange integrations
+        use_cases:
+          - Message bus integration patterns
+          - Order book handling
+          - Market data normalization
+          - Event-driven architecture
+        key_files:
+          - "nautilus_trader/adapters/binance/*"
+          - "nautilus_trader/infrastructure/redis.py"
+          - "nautilus_trader/model/data/*.py"
+
+      - path: microprice
+        language: Multiple
+        purpose: Microprice calculation implementations
+        use_cases:
+          - Microprice formula implementation
+          - Volume-weighted calculations
+        key_files:
+          - "*.py"
+          - "*.go"
+
+      - path: py-market-profile
+        language: Python
+        purpose: Volume profile calculations
+        use_cases:
+          - POC (Point of Control) calculation
+          - Value Area High/Low
+          - Volume distribution analysis
+        key_files:
+          - "marketprofile/*.py"
+
+      - path: spoof.io
+        language: Multiple
+        purpose: Spoofing detection algorithms
+        use_cases:
+          - Order book anomaly detection
+          - Spoofing pattern recognition
+          - Market manipulation detection
+        key_files:
+          - "detection/*"
+
+      - path: gtrs
+        language: Go
+        purpose: Go Trading Reference System
+        use_cases:
+          - Go trading system architecture
+          - Event processing patterns
+
+  # ============================================================================
+  # UTILITIES & TOOLS
+  # ============================================================================
+
+  - name: Utilities
+    description: Helper scripts and tools
+    repositories:
+
+      - path: clone.sh
+        language: Shell
+        purpose: Script to clone all reference repositories
+        use_cases:
+          - Setting up .refs directory
+          - Updating reference repositories
+
+# ============================================================================
+# MANDATORY CONSULTATION WORKFLOW
+# ============================================================================
+
+workflow:
+  description: |
+    Before implementing ANY integration, library usage, or pattern:
+
+    1. IDENTIFY relevant category in this index
+    2. READ key_files from applicable repositories
+    3. EXTRACT working patterns from examples
+    4. ADAPT patterns to context8-mcp architecture
+    5. DOCUMENT deviations from reference patterns in code comments
+
+  failure_modes:
+    - "Writing custom code without checking references → reinventing wheel"
+    - "Misusing library API → bugs, performance issues"
+    - "Ignoring established patterns → inconsistent codebase"
+
+  examples:
+    - task: "Implement Redis Streams consumer"
+      steps:
+        - "1. Consult 'Redis Streams & Cache' category"
+        - "2. Read go-redis/stream_commands.go and examples"
+        - "3. Extract XREADGROUP pattern with consumer group"
+        - "4. Implement with XACK acknowledgment as shown"
+
+    - task: "Subscribe to Binance order book WebSocket"
+      steps:
+        - "1. Consult 'Exchange Integrations' category"
+        - "2. Read go-binance/v2/websocket_service.go"
+        - "3. Review nautilus_trader Binance adapter"
+        - "4. Implement reconnection logic from examples"
+
+    - task: "Calculate microprice from order book"
+      steps:
+        - "1. Consult 'Market Data Processing' category"
+        - "2. Read microprice/* implementations"
+        - "3. Verify formula matches constitution principle 6"
+        - "4. Implement with proper null-handling"
+
+    - task: "Expose market reports via MCP"
+      steps:
+        - "1. Consult 'MCP Integration' category"
+        - "2. Read mcp-go server examples"
+        - "3. Extract tool registration pattern"
+        - "4. Implement read-only handler as specified"
+
+# ============================================================================
+# ANTI-PATTERNS TO AVOID
+# ============================================================================
+
+anti_patterns:
+  - pattern: "Skipping index consultation"
+    consequence: "Reinventing solved problems, incompatible patterns"
+    remedy: "Always check index first, even for 'simple' tasks"
+
+  - pattern: "Copying code without understanding"
+    consequence: "Hidden bugs, architectural mismatches"
+    remedy: "Read reference code, adapt to context8-mcp principles"
+
+  - pattern: "Using outdated library versions from examples"
+    consequence: "Deprecated API usage, security vulnerabilities"
+    remedy: "Check library versions, read migration guides if needed"
+
+  - pattern: "Ignoring error handling from examples"
+    consequence: "Production crashes, data loss"
+    remedy: "Preserve error handling patterns from reference code"
+
+# ============================================================================
+# INDEX MAINTENANCE
+# ============================================================================
+
+maintenance:
+  update_triggers:
+    - "New reference repository added to .refs/"
+    - "Existing repository updated (document in sync_log below)"
+    - "New integration requirement emerges"
+
+  version_policy:
+    - "MAJOR: Structural changes (category reorganization)"
+    - "MINOR: New repositories or categories added"
+    - "PATCH: Documentation updates, typo fixes"
+
+  sync_log:
+    - date: "2025-10-28"
+      action: "Initial index creation"
+      repositories: "All existing .refs/ repositories cataloged"
