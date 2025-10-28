@@ -1,0 +1,360 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://context8-mcp/schemas/market-report-v1.1.json",
+  "title": "MarketReport v1.1",
+  "description": "Market analysis report with distributed coordination metadata for embedded analytics",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "writer",
+    "updatedAt",
+    "symbol",
+    "venue",
+    "generated_at",
+    "data_age_ms",
+    "ingestion",
+    "last_price",
+    "change_24h_pct",
+    "high_24h",
+    "low_24h",
+    "volume_24h",
+    "best_bid",
+    "best_ask",
+    "spread_bps",
+    "mid_price",
+    "micro_price",
+    "depth",
+    "flow",
+    "health"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "enum": ["1.1"],
+      "description": "Schema version for this report format"
+    },
+    "writer": {
+      "type": "object",
+      "description": "Distributed coordination metadata",
+      "required": ["nodeId", "writerToken"],
+      "properties": {
+        "nodeId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique identifier of producer instance that generated this report"
+        },
+        "writerToken": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Monotonic fencing token from writer lease, used to detect stale writers"
+        }
+      }
+    },
+    "updatedAt": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Report generation timestamp in milliseconds since Unix epoch (UTC)"
+    },
+    "symbol": {
+      "type": "string",
+      "pattern": "^[A-Z0-9]+$",
+      "description": "Trading pair symbol (e.g., BTCUSDT)"
+    },
+    "venue": {
+      "type": "string",
+      "enum": ["BINANCE"],
+      "description": "Exchange venue (MVP: Binance only)"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 timestamp when report was generated (UTC)"
+    },
+    "data_age_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Milliseconds since last market data event (freshness indicator)"
+    },
+    "ingestion": {
+      "type": "object",
+      "required": ["status", "last_update"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["ok", "degraded", "down"],
+          "description": "Data ingestion health status"
+        },
+        "last_update": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of last market data event (UTC)"
+        }
+      }
+    },
+    "last_price": {
+      "type": "number",
+      "minimum": 0,
+      "exclusiveMinimum": true,
+      "description": "Most recent trade price"
+    },
+    "change_24h_pct": {
+      "type": "number",
+      "description": "24-hour price change percentage"
+    },
+    "high_24h": {
+      "type": "number",
+      "minimum": 0,
+      "exclusiveMinimum": true
+    },
+    "low_24h": {
+      "type": "number",
+      "minimum": 0,
+      "exclusiveMinimum": true
+    },
+    "volume_24h": {
+      "type": "number",
+      "minimum": 0
+    },
+    "best_bid": {
+      "$ref": "#/definitions/priceQty"
+    },
+    "best_ask": {
+      "$ref": "#/definitions/priceQty"
+    },
+    "spread_bps": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Spread in basis points, rounded to 4 decimals"
+    },
+    "mid_price": {
+      "type": "number",
+      "minimum": 0,
+      "exclusiveMinimum": true,
+      "description": "Mid price (average of best bid and ask), rounded to 8 decimals"
+    },
+    "micro_price": {
+      "type": "number",
+      "minimum": 0,
+      "exclusiveMinimum": true,
+      "description": "Volume-weighted microprice, rounded to 8 decimals"
+    },
+    "depth": {
+      "type": "object",
+      "required": ["bids", "asks", "total_bid_qty", "total_ask_qty", "imbalance"],
+      "properties": {
+        "bids": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/priceQty"},
+          "maxItems": 20,
+          "description": "Top 20 bid levels sorted descending by price"
+        },
+        "asks": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/priceQty"},
+          "maxItems": 20,
+          "description": "Top 20 ask levels sorted ascending by price"
+        },
+        "total_bid_qty": {
+          "type": "number",
+          "minimum": 0
+        },
+        "total_ask_qty": {
+          "type": "number",
+          "minimum": 0
+        },
+        "imbalance": {
+          "type": "number",
+          "minimum": -1.0,
+          "maximum": 1.0,
+          "description": "Order book imbalance ratio: (bid_qty - ask_qty) / (bid_qty + ask_qty)"
+        }
+      }
+    },
+    "flow": {
+      "type": "object",
+      "required": ["orders_per_sec", "net_flow"],
+      "properties": {
+        "orders_per_sec": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Market activity rate over 10-second window"
+        },
+        "net_flow": {
+          "type": "number",
+          "description": "Net aggressive buy/sell flow over 30-second window (can be negative)"
+        }
+      }
+    },
+    "liquidity": {
+      "type": "object",
+      "properties": {
+        "walls": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/liquidityWall"},
+          "description": "Detected liquidity walls (large concentrated orders)"
+        },
+        "vacuums": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/liquidityVacuum"},
+          "description": "Detected liquidity vacuums (thin regions)"
+        },
+        "volume_profile": {
+          "$ref": "#/definitions/volumeProfile",
+          "description": "Volume profile over rolling 30-minute window (optional, only if sufficient data)"
+        }
+      }
+    },
+    "anomalies": {
+      "type": "array",
+      "items": {"$ref": "#/definitions/anomaly"},
+      "description": "Detected market anomalies (spoofing, iceberg, flash crash risk)"
+    },
+    "health": {
+      "type": "object",
+      "required": ["score", "components"],
+      "properties": {
+        "score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Composite health score (0-100)"
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["metric", "score"],
+            "properties": {
+              "metric": {
+                "type": "string",
+                "description": "Component metric name (e.g., spread, depth, freshness)"
+              },
+              "score": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "priceQty": {
+      "type": "object",
+      "required": ["price", "qty"],
+      "properties": {
+        "price": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMinimum": true
+        },
+        "qty": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMinimum": true
+        }
+      }
+    },
+    "liquidityWall": {
+      "type": "object",
+      "required": ["side", "price", "qty", "severity"],
+      "properties": {
+        "side": {
+          "type": "string",
+          "enum": ["bid", "ask"]
+        },
+        "price": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMinimum": true
+        },
+        "qty": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMinimum": true
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["low", "medium", "high"]
+        }
+      }
+    },
+    "liquidityVacuum": {
+      "type": "object",
+      "required": ["from", "to", "severity"],
+      "properties": {
+        "from": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMinimum": true,
+          "description": "Start price of vacuum region"
+        },
+        "to": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMinimum": true,
+          "description": "End price of vacuum region"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["low", "medium", "high"]
+        }
+      }
+    },
+    "volumeProfile": {
+      "type": "object",
+      "required": ["POC", "VAH", "VAL", "window_sec", "trade_count"],
+      "properties": {
+        "POC": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMinimum": true,
+          "description": "Point of Control - price with maximum volume"
+        },
+        "VAH": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMinimum": true,
+          "description": "Value Area High - upper 70% volume boundary"
+        },
+        "VAL": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMinimum": true,
+          "description": "Value Area Low - lower 70% volume boundary"
+        },
+        "window_sec": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Time window in seconds (e.g., 1800 for 30 minutes)"
+        },
+        "trade_count": {
+          "type": "integer",
+          "minimum": 10,
+          "description": "Number of trades used in calculation"
+        }
+      }
+    },
+    "anomaly": {
+      "type": "object",
+      "required": ["type", "severity", "note"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["spoofing", "iceberg", "flash_crash_risk"]
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["low", "medium", "high"]
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable description with key metrics"
+        }
+      }
+    }
+  }
+}
