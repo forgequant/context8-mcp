@@ -101,55 +101,55 @@
 
 ### US1: Producer - Data Ingestion
 
-- [ ] T041 [P] [US1] Create producer/src/binance_adapter.py with NautilusTrader Binance configuration for BTCUSDT and ETHUSDT
-- [ ] T042 [P] [US1] Create producer/src/redis_publisher.py to publish MarketEventEnvelope to Redis Streams at key nt:binance
-- [ ] T043 [US1] Implement JSON serialization in producer/src/redis_publisher.py with snake_case fields per constitution principle 2
-- [ ] T044 [US1] Implement main.py entry point in producer/src/main.py to initialize NautilusTrader, configure Binance adapter, and start publishing
-- [ ] T045 [US1] Add structured JSON logging to producer/src/redis_publisher.py with component, symbol, stream_id fields
-- [ ] T046 [US1] Update docker-compose.yml to add producer service with dependencies on redis, using producer/Dockerfile
+- [X] T041 [P] [US1] Create producer/src/binance_adapter.py with NautilusTrader Binance configuration for BTCUSDT and ETHUSDT
+- [X] T042 [P] [US1] Create producer/src/redis_publisher.py to publish MarketEventEnvelope to Redis Streams at key nt:binance
+- [X] T043 [US1] Implement JSON serialization in producer/src/redis_publisher.py with snake_case fields per constitution principle 2
+- [X] T044 [US1] Implement main.py entry point in producer/src/main.py to initialize NautilusTrader, configure Binance adapter, and start publishing
+- [X] T045 [US1] Add structured JSON logging to producer/src/redis_publisher.py with component, symbol, stream_id fields
+- [X] T046 [US1] Update docker-compose.yml to add producer service with dependencies on redis, using producer/Dockerfile
 
 ### US1: Analytics - Consumer and Basic Metrics
 
-- [ ] T047 [P] [US1] Implement Redis Streams consumer in analytics/internal/consumer/consumer.go using XREADGROUP with consumer group "context8"
-- [ ] T048 [US1] Implement XACK acknowledgment logic in analytics/internal/consumer/consumer.go after successful processing
-- [ ] T049 [US1] Implement event deserialization in analytics/internal/consumer/consumer.go to parse JSON into MarketEventEnvelope structs
-- [ ] T050 [P] [US1] Implement spread_bps calculation in analytics/internal/metrics/spread.go per FR-006: `(ask - bid) / bid * 10000`
-- [ ] T051 [P] [US1] Implement mid_price calculation in analytics/internal/metrics/spread.go per FR-007: `(bid + ask) / 2`
-- [ ] T052 [P] [US1] Implement micro_price calculation in analytics/internal/metrics/spread.go per FR-008: `(ask * bidQty + bid * askQty) / (bidQty + askQty)`
-- [ ] T053 [P] [US1] Implement depth metrics calculation in analytics/internal/metrics/depth.go: top 20 levels, sum_bid, sum_ask per FR-009
-- [ ] T054 [P] [US1] Implement order book imbalance calculation in analytics/internal/metrics/depth.go per FR-010: `(sum_bid - sum_ask) / (sum_bid + sum_ask)`
-- [ ] T055 [P] [US1] Document spread, mid-price, micro-price formulas in docs/metrics.md with examples and edge cases
-- [ ] T056 [P] [US1] Document depth and imbalance formulas in docs/metrics.md with invariant bounds [-1, 1]
+- [X] T047 [P] [US1] Implement Redis Streams consumer in analytics/internal/consumer/consumer.go using XREADGROUP with consumer group "context8"
+- [X] T048 [US1] Implement XACK acknowledgment logic in analytics/internal/consumer/consumer.go after successful processing
+- [X] T049 [US1] Implement event deserialization in analytics/internal/consumer/consumer.go to parse JSON into MarketEventEnvelope structs
+- [X] T050 [P] [US1] Implement spread_bps calculation in analytics/internal/metrics/spread.go per FR-006: `(ask - bid) / bid * 10000`
+- [X] T051 [P] [US1] Implement mid_price calculation in analytics/internal/metrics/spread.go per FR-007: `(bid + ask) / 2`
+- [X] T052 [P] [US1] Implement micro_price calculation in analytics/internal/metrics/spread.go per FR-008: `(ask * bidQty + bid * askQty) / (bidQty + askQty)`
+- [X] T053 [P] [US1] Implement depth metrics calculation in analytics/internal/metrics/depth.go: top 20 levels, sum_bid, sum_ask per FR-009
+- [X] T054 [P] [US1] Implement order book imbalance calculation in analytics/internal/metrics/depth.go per FR-010: `(sum_bid - sum_ask) / (sum_bid + sum_ask)`
+- [X] T055 [P] [US1] Document spread, mid-price, micro-price formulas in docs/metrics.md with examples and edge cases
+- [X] T056 [P] [US1] Document depth and imbalance formulas in docs/metrics.md with invariant bounds [-1, 1]
 
 ### US1: Analytics - Report Aggregation
 
-- [ ] T057 [US1] Implement report aggregator in analytics/internal/aggregator/aggregator.go to combine metrics into MarketReport struct
-- [ ] T058 [US1] Implement 24h statistics extraction in analytics/internal/aggregator/aggregator.go from Ticker24h events per FR-005
-- [ ] T059 [US1] Implement data_age_ms calculation in analytics/internal/aggregator/aggregator.go per FR-020: `generated_at - ts_event` in milliseconds
-- [ ] T060 [US1] Implement fresh boolean flag logic in analytics/internal/aggregator/aggregator.go: `fresh = (data_age_ms <= 1000)`
-- [ ] T061 [US1] Implement ingestion status determination in analytics/internal/aggregator/aggregator.go per FR-021 state machine (ok/degraded/down)
-- [ ] T062 [US1] Implement report JSON schema validation in analytics/internal/aggregator/aggregator.go using validation.go functions before caching
-- [ ] T063 [US1] Implement Redis KV cache writer in analytics/internal/aggregator/cache.go to store report at key `report:{symbol}` with TTL
-- [ ] T064 [US1] Add structured JSON logging to analytics aggregator with component, symbol, lag_ms, stream_id fields
-- [ ] T065 [US1] Wire consumer, metrics, aggregator, cache in analytics/cmd/server/main.go to create processing pipeline
-- [ ] T066 [US1] Update docker-compose.yml to add analytics service with dependencies on redis and producer
+- [X] T057 [US1] Implement report aggregator in analytics/internal/aggregator/aggregator.go to combine metrics into MarketReport struct
+- [X] T058 [US1] Implement 24h statistics extraction in analytics/internal/aggregator/aggregator.go from Ticker24h events per FR-005
+- [X] T059 [US1] Implement data_age_ms calculation in analytics/internal/aggregator/aggregator.go per FR-020: `generated_at - ts_event` in milliseconds
+- [X] T060 [US1] Implement fresh boolean flag logic in analytics/internal/aggregator/aggregator.go: `fresh = (data_age_ms <= 1000)`
+- [X] T061 [US1] Implement ingestion status determination in analytics/internal/aggregator/aggregator.go per FR-021 state machine (ok/degraded/down)
+- [X] T062 [US1] Implement report JSON schema validation in analytics/internal/aggregator/aggregator.go using validation.go functions before caching
+- [X] T063 [US1] Implement Redis KV cache writer in analytics/internal/aggregator/cache.go to store report at key `report:{symbol}` with TTL
+- [X] T064 [US1] Add structured JSON logging to analytics aggregator with component, symbol, lag_ms, stream_id fields
+- [X] T065 [US1] Wire consumer, metrics, aggregator, cache in analytics/cmd/server/main.go to create processing pipeline
+- [X] T066 [US1] Update docker-compose.yml to add analytics service with dependencies on redis and producer
 
 ### US1: MCP Server - Read-Only API
 
-- [ ] T067 [P] [US1] Implement Redis KV reader in mcp/internal/cache/reader.go to fetch report from `report:{symbol}` key
-- [ ] T068 [P] [US1] Implement get_report handler in mcp/internal/handlers/get_report.go to call cache reader and return JSON
-- [ ] T069 [US1] Implement 150ms timeout middleware in mcp/internal/handlers/middleware.go per FR-023
-- [ ] T070 [US1] Implement error handling in mcp/internal/handlers/get_report.go for symbol_not_indexed (404) and backend_unavailable per FR-024, FR-025
-- [ ] T071 [US1] Implement structured JSON logging middleware in mcp/internal/handlers/middleware.go
-- [ ] T072 [US1] Setup chi router in mcp/cmd/server/main.go with /get_report endpoint mapped to handler
-- [ ] T073 [US1] Update docker-compose.yml to add mcp service with port 8080:8080, dependencies on redis and analytics
+- [X] T067 [P] [US1] Implement Redis KV reader in mcp/internal/cache/reader.go to fetch report from `report:{symbol}` key
+- [X] T068 [P] [US1] Implement get_report handler in mcp/internal/handlers/get_report.go to call cache reader and return JSON
+- [X] T069 [US1] Implement 150ms timeout middleware in mcp/internal/handlers/middleware.go per FR-023
+- [X] T070 [US1] Implement error handling in mcp/internal/handlers/get_report.go for symbol_not_indexed (404) and backend_unavailable per FR-024, FR-025
+- [X] T071 [US1] Implement structured JSON logging middleware in mcp/internal/handlers/middleware.go
+- [X] T072 [US1] Setup chi router in mcp/cmd/server/main.go with /get_report endpoint mapped to handler
+- [X] T073 [US1] Update docker-compose.yml to add mcp service with port 8080:8080, dependencies on redis and analytics
 
 ### US1: Observability - Basic Monitoring
 
-- [ ] T074 [P] [US1] Implement Prometheus metrics in analytics/cmd/server/main.go: stream_lag_ms, events_rate, calc_latency_ms per FR-030
-- [ ] T075 [P] [US1] Implement Prometheus metrics in mcp/cmd/server/main.go: mcp_requests_total, mcp_request_duration_ms per FR-030
-- [ ] T076 [US1] Add Prometheus service to docker-compose.yml with port 9090:9090 and scrape configuration
-- [ ] T077 [US1] Create prometheus.yml at repository root with scrape configs for analytics and mcp services
+- [X] T074 [P] [US1] Implement Prometheus metrics in analytics/cmd/server/main.go: stream_lag_ms, events_rate, calc_latency_ms per FR-030
+- [X] T075 [P] [US1] Implement Prometheus metrics in mcp/cmd/server/main.go: mcp_requests_total, mcp_request_duration_ms per FR-030
+- [X] T076 [US1] Add Prometheus service to docker-compose.yml with port 9090:9090 and scrape configuration
+- [X] T077 [US1] Create prometheus.yml at repository root with scrape configs for analytics and mcp services
 
 **Checkpoint**: At this point, User Story 1 (MVP) should be fully functional - can deploy with docker-compose and query BTCUSDT/ETHUSDT reports
 
@@ -165,20 +165,20 @@
 
 ### US2: Deployment Configuration
 
-- [ ] T078 [P] [US2] Add health check endpoints to producer/src/main.py at /health to check Binance WebSocket status
-- [ ] T079 [P] [US2] Add health check endpoint to analytics/cmd/server/main.go at /health to check consumer lag and processing rate
-- [ ] T080 [P] [US2] Add health check endpoint to mcp/cmd/server/main.go at /health to check Redis connectivity
-- [ ] T081 [US2] Configure healthcheck directives in docker-compose.yml for all services with appropriate intervals and retries
-- [ ] T082 [US2] Configure depends_on with service_healthy conditions in docker-compose.yml to ensure proper startup ordering
-- [ ] T083 [US2] Test full docker-compose startup and verify all containers reach healthy state within 20 seconds per SC-004
+- [X] T078 [P] [US2] Add health check endpoints to producer/src/main.py at /health to check Binance WebSocket status
+- [X] T079 [P] [US2] Add health check endpoint to analytics/cmd/server/main.go at /health to check consumer lag and processing rate
+- [X] T080 [P] [US2] Add health check endpoint to mcp/cmd/server/main.go at /health to check Redis connectivity
+- [X] T081 [US2] Configure healthcheck directives in docker-compose.yml for all services with appropriate intervals and retries
+- [X] T082 [US2] Configure depends_on with service_healthy conditions in docker-compose.yml to ensure proper startup ordering
+- [X] T083 [US2] Test full docker-compose startup and verify all containers reach healthy state within 20 seconds per SC-004
 
 ### US2: Documentation and Quickstart
 
-- [ ] T084 [P] [US2] Copy specs/001-market-report-mcp/quickstart.md to docs/quickstart.md at repository root
-- [ ] T085 [US2] Update README.md with link to docs/quickstart.md and brief deployment instructions
-- [ ] T086 [US2] Document .env.example configuration options with descriptions and default values
-- [ ] T087 [US2] Create docs/runbooks/deployment.md with step-by-step deployment procedures and verification steps
-- [ ] T088 [US2] Create docs/runbooks/troubleshooting.md with common issues and solutions for startup failures
+- [X] T084 [P] [US2] Copy specs/001-market-report-mcp/quickstart.md to docs/quickstart.md at repository root
+- [X] T085 [US2] Update README.md with link to docs/quickstart.md and brief deployment instructions
+- [X] T086 [US2] Document .env.example configuration options with descriptions and default values
+- [X] T087 [US2] Create docs/runbooks/deployment.md with step-by-step deployment procedures and verification steps
+- [X] T088 [US2] Create docs/runbooks/troubleshooting.md with common issues and solutions for startup failures
 
 **Checkpoint**: System is deployable via docker-compose with health checks and complete documentation
 
@@ -194,14 +194,14 @@
 
 ### US5: Health Monitoring and Status Tracking
 
-- [ ] T089 [US5] Implement ingestion status state machine in analytics/internal/aggregator/aggregator.go with transitions (ok → degraded → down)
-- [ ] T090 [US5] Implement transition logic in aggregator: ok → degraded when data_age_ms > 1000 for >2 seconds per data-model.md section 4.1
-- [ ] T091 [US5] Implement transition logic in aggregator: degraded → down when data_age_ms > 5000 per FR-021
-- [ ] T092 [US5] Implement transition logic in aggregator: degraded/down → ok when fresh data received with data_age_ms <= 1000
-- [ ] T093 [US5] Add report_age_ms Prometheus metric to analytics/cmd/server/main.go to track staleness
-- [ ] T094 [US5] Add errors_total Prometheus metric to analytics and mcp services to track error rates by component and type
-- [ ] T095 [US5] Document health monitoring and alerting thresholds in docs/runbooks/monitoring.md
-- [ ] T096 [US5] Test degradation detection by stopping producer and verifying status transitions within 2 seconds per SC-005
+- [X] T089 [US5] Implement ingestion status state machine in analytics/internal/aggregator/aggregator.go with transitions (ok → degraded → down)
+- [X] T090 [US5] Implement transition logic in aggregator: ok → degraded when data_age_ms > 1000 for >2 seconds per data-model.md section 4.1
+- [X] T091 [US5] Implement transition logic in aggregator: degraded → down when data_age_ms > 5000 per FR-021
+- [X] T092 [US5] Implement transition logic in aggregator: degraded/down → ok when fresh data received with data_age_ms <= 1000
+- [X] T093 [US5] Add report_age_ms Prometheus metric to analytics/cmd/server/main.go to track staleness
+- [X] T094 [US5] Add errors_total Prometheus metric to analytics and mcp services to track error rates by component and type
+- [X] T095 [US5] Document health monitoring and alerting thresholds in docs/runbooks/monitoring.md
+- [X] T096 [US5] Test degradation detection by stopping producer and verifying status transitions within 2 seconds per SC-005
 
 **Checkpoint**: System can detect and report data quality issues with clear status indicators
 
@@ -217,12 +217,12 @@
 
 ### US6: Flow Metrics Implementation
 
-- [ ] T097 [P] [US6] Implement orders_per_sec calculation in analytics/internal/metrics/flow.go: average events over last 10 seconds per FR-014
-- [ ] T098 [P] [US6] Implement net_flow calculation in analytics/internal/metrics/flow.go: aggressive buy volume - sell volume over last 30 seconds per FR-015
-- [ ] T099 [US6] Implement rolling window data structures in analytics/internal/metrics/flow.go to track events and trades over time windows
-- [ ] T100 [US6] Integrate flow metrics into report aggregator in analytics/internal/aggregator/aggregator.go
-- [ ] T101 [US6] Document flow metrics formulas and time windows in docs/metrics.md
-- [ ] T102 [US6] Verify flow metrics accuracy with synthetic events at known rates and volumes
+- [X] T097 [P] [US6] Implement orders_per_sec calculation in analytics/internal/metrics/flow.go: average events over last 10 seconds per FR-014
+- [X] T098 [P] [US6] Implement net_flow calculation in analytics/internal/metrics/flow.go: aggressive buy volume - sell volume over last 30 seconds per FR-015
+- [X] T099 [US6] Implement rolling window data structures in analytics/internal/metrics/flow.go to track events and trades over time windows
+- [X] T100 [US6] Integrate flow metrics into report aggregator in analytics/internal/aggregator/aggregator.go
+- [X] T101 [US6] Document flow metrics formulas and time windows in docs/metrics.md
+- [X] T102 [US6] Verify flow metrics accuracy with synthetic events at known rates and volumes
 
 **Checkpoint**: System tracks and reports market activity intensity and directional pressure
 
@@ -238,33 +238,33 @@
 
 ### US4: Liquidity Wall Detection
 
-- [ ] T103 [P] [US4] Implement rolling percentile calculation (P95) in analytics/internal/metrics/liquidity.go for wall detection threshold
-- [ ] T104 [US4] Implement wall detection logic in analytics/internal/metrics/liquidity.go per FR-011: qty >= max(P95 * 1.5, configurable_minimum)
-- [ ] T105 [US4] Implement severity classification for walls (low/medium/high) based on multiples of threshold
-- [ ] T106 [US4] Document wall detection algorithm and thresholds in docs/metrics.md
+- [X] T103 [P] [US4] Implement rolling percentile calculation (P95) in analytics/internal/metrics/liquidity.go for wall detection threshold
+- [X] T104 [US4] Implement wall detection logic in analytics/internal/metrics/liquidity.go per FR-011: qty >= max(P95 * 1.5, configurable_minimum)
+- [X] T105 [US4] Implement severity classification for walls (low/medium/high) based on multiples of threshold
+- [X] T106 [US4] Document wall detection algorithm and thresholds in docs/metrics.md
 
 ### US4: Liquidity Vacuum Detection
 
-- [ ] T107 [P] [US4] Implement rolling percentile calculation (P10) in analytics/internal/metrics/liquidity.go for vacuum detection threshold
-- [ ] T108 [US4] Implement vacuum detection logic in analytics/internal/metrics/liquidity.go per FR-012: depth < P10 over several ticks
-- [ ] T109 [US4] Implement adjacent vacuum region merging in analytics/internal/metrics/liquidity.go
-- [ ] T110 [US4] Implement severity classification for vacuums based on depth ratio
-- [ ] T111 [US4] Document vacuum detection algorithm and merging rules in docs/metrics.md
+- [X] T107 [P] [US4] Implement rolling percentile calculation (P10) in analytics/internal/metrics/liquidity.go for vacuum detection threshold
+- [X] T108 [US4] Implement vacuum detection logic in analytics/internal/metrics/liquidity.go per FR-012: depth < P10 over several ticks
+- [X] T109 [US4] Implement adjacent vacuum region merging in analytics/internal/metrics/liquidity.go
+- [X] T110 [US4] Implement severity classification for vacuums based on depth ratio
+- [X] T111 [US4] Document vacuum detection algorithm and merging rules in docs/metrics.md
 
 ### US4: Volume Profile Calculation
 
-- [ ] T112 [US4] Implement trade volume binning by price in analytics/internal/metrics/liquidity.go with configurable bin width
-- [ ] T113 [US4] Implement rolling 30-minute window for volume profile per FR-013
-- [ ] T114 [US4] Implement POC (Point of Control) calculation: bin with maximum volume
-- [ ] T115 [US4] Implement VAH/VAL calculation: boundaries covering 70% of volume around POC per FR-013
-- [ ] T116 [US4] Validate volume profile invariants: val <= poc <= vah per data-model.md section 2.8
-- [ ] T117 [US4] Document volume profile calculation and bin width tuning in docs/metrics.md
+- [X] T112 [US4] Implement trade volume binning by price in analytics/internal/metrics/liquidity.go with configurable bin width
+- [X] T113 [US4] Implement rolling 30-minute window for volume profile per FR-013
+- [X] T114 [US4] Implement POC (Point of Control) calculation: bin with maximum volume
+- [X] T115 [US4] Implement VAH/VAL calculation: boundaries covering 70% of volume around POC per FR-013
+- [X] T116 [US4] Validate volume profile invariants: val <= poc <= vah per data-model.md section 2.8
+- [X] T117 [US4] Document volume profile calculation and bin width tuning in docs/metrics.md
 
 ### US4: Integration
 
-- [ ] T118 [US4] Integrate liquidity analysis (walls, vacuums, profile) into report aggregator in analytics/internal/aggregator/aggregator.go
-- [ ] T119 [US4] Verify wall detection with crafted order books containing known large orders per SC-008
-- [ ] T120 [US4] Verify vacuum detection with crafted order books containing thin regions per SC-008
+- [X] T118 [US4] Integrate liquidity analysis (walls, vacuums, profile) into report aggregator in analytics/internal/aggregator/aggregator.go
+- [X] T119 [US4] Verify wall detection with crafted order books containing known large orders per SC-008
+- [X] T120 [US4] Verify vacuum detection with crafted order books containing thin regions per SC-008
 
 **Checkpoint**: System provides comprehensive liquidity analysis for sophisticated trading intelligence
 
@@ -280,33 +280,33 @@
 
 ### US3: Spoofing Detection
 
-- [ ] T121 [P] [US3] Implement large order tracking in analytics/internal/metrics/anomalies.go to identify orders far from mid price
-- [ ] T122 [P] [US3] Implement cancellation rate tracking in analytics/internal/metrics/anomalies.go for detected large orders
-- [ ] T123 [US3] Implement spoofing pattern detection per FR-016: large orders far from mid with high cancel rate
-- [ ] T124 [US3] Implement severity classification for spoofing (low/medium/high) based on distance from mid and cancel frequency
-- [ ] T125 [US3] Document spoofing detection algorithm and thresholds in docs/metrics.md
+- [X] T121 [P] [US3] Implement large order tracking in analytics/internal/metrics/anomalies.go to identify orders far from mid price
+- [X] T122 [P] [US3] Implement cancellation rate tracking in analytics/internal/metrics/anomalies.go for detected large orders
+- [X] T123 [US3] Implement spoofing pattern detection per FR-016: large orders far from mid with high cancel rate
+- [X] T124 [US3] Implement severity classification for spoofing (low/medium/high) based on distance from mid and cancel frequency
+- [X] T125 [US3] Document spoofing detection algorithm and thresholds in docs/metrics.md
 
 ### US3: Iceberg Detection
 
-- [ ] T126 [P] [US3] Implement partial fill tracking in analytics/internal/metrics/anomalies.go at specific price levels
-- [ ] T127 [US3] Implement visible depth stability monitoring in analytics/internal/metrics/anomalies.go
-- [ ] T128 [US3] Implement iceberg pattern detection per FR-017: series of similar fills with stable visible depth
-- [ ] T129 [US3] Document iceberg detection algorithm and pattern matching in docs/metrics.md
+- [X] T126 [P] [US3] Implement partial fill tracking in analytics/internal/metrics/anomalies.go at specific price levels
+- [X] T127 [US3] Implement visible depth stability monitoring in analytics/internal/metrics/anomalies.go
+- [X] T128 [US3] Implement iceberg pattern detection per FR-017: series of similar fills with stable visible depth
+- [X] T129 [US3] Document iceberg detection algorithm and pattern matching in docs/metrics.md
 
 ### US3: Flash Crash Risk Detection
 
-- [ ] T130 [US3] Implement spread widening detection in analytics/internal/metrics/anomalies.go: track spread_bps increases
-- [ ] T131 [US3] Implement order book thinness detection in analytics/internal/metrics/anomalies.go: count vacuums and low depth
-- [ ] T132 [US3] Implement flow velocity tracking in analytics/internal/metrics/anomalies.go: rate of net_flow change
-- [ ] T133 [US3] Implement flash crash risk pattern detection per FR-018: widening spread + thin book + negative accelerating flow
-- [ ] T134 [US3] Implement severity classification for flash crash risk based on combined signal strength
-- [ ] T135 [US3] Document flash crash risk detection algorithm and signal weighting in docs/metrics.md
+- [X] T130 [US3] Implement spread widening detection in analytics/internal/metrics/anomalies.go: track spread_bps increases
+- [X] T131 [US3] Implement order book thinness detection in analytics/internal/metrics/anomalies.go: count vacuums and low depth
+- [X] T132 [US3] Implement flow velocity tracking in analytics/internal/metrics/anomalies.go: rate of net_flow change
+- [X] T133 [US3] Implement flash crash risk pattern detection per FR-018: widening spread + thin book + negative accelerating flow
+- [X] T134 [US3] Implement severity classification for flash crash risk based on combined signal strength
+- [X] T135 [US3] Document flash crash risk detection algorithm and signal weighting in docs/metrics.md
 
 ### US3: Integration
 
-- [ ] T136 [US3] Integrate anomaly detection (spoofing, iceberg, flash crash) into report aggregator in analytics/internal/aggregator/aggregator.go
-- [ ] T137 [US3] Verify spoofing detection with synthetic spoofing events per SC-007
-- [ ] T138 [US3] Add optional note field to anomaly entries with human-readable descriptions
+- [X] T136 [US3] Integrate anomaly detection (spoofing, iceberg, flash crash) into report aggregator in analytics/internal/aggregator/aggregator.go
+- [X] T137 [US3] Verify spoofing detection with synthetic spoofing events per SC-007
+- [X] T138 [US3] Add optional note field to anomaly entries with human-readable descriptions
 
 **Checkpoint**: System detects and reports market manipulation patterns and crash risks
 
@@ -320,23 +320,23 @@
 
 ### Health Score Implementation
 
-- [ ] T139 [P] Implement spread component normalization in analytics/internal/metrics/health.go: tighter spread = higher score
-- [ ] T140 [P] Implement depth component normalization in analytics/internal/metrics/health.go: more depth = higher score
-- [ ] T141 [P] Implement balance component normalization in analytics/internal/metrics/health.go: closer to zero imbalance = higher score
-- [ ] T142 [P] Implement flow component normalization in analytics/internal/metrics/health.go: higher activity = higher score
-- [ ] T143 [P] Implement anomalies component calculation in analytics/internal/metrics/health.go: penalty for detected anomalies
-- [ ] T144 [P] Implement freshness component calculation in analytics/internal/metrics/health.go: fresher data = higher score
-- [ ] T145 Implement weighted sum calculation in analytics/internal/metrics/health.go per FR-019: {spread: 20%, depth: 25%, balance: 15%, flow: 15%, anomalies: 15%, freshness: 10%}
-- [ ] T146 Document health score calculation, component weights, and interpretation ranges in docs/metrics.md
-- [ ] T147 Integrate health score calculation into report aggregator in analytics/internal/aggregator/aggregator.go
-- [ ] T148 Validate health score bounds [0, 100] with property-based tests across diverse inputs
+- [X] T139 [P] Implement spread component normalization in analytics/internal/metrics/health.go: tighter spread = higher score
+- [X] T140 [P] Implement depth component normalization in analytics/internal/metrics/health.go: more depth = higher score
+- [X] T141 [P] Implement balance component normalization in analytics/internal/metrics/health.go: closer to zero imbalance = higher score
+- [X] T142 [P] Implement flow component normalization in analytics/internal/metrics/health.go: higher activity = higher score
+- [X] T143 [P] Implement anomalies component calculation in analytics/internal/metrics/health.go: penalty for detected anomalies
+- [X] T144 [P] Implement freshness component calculation in analytics/internal/metrics/health.go: fresher data = higher score
+- [X] T145 Implement weighted sum calculation in analytics/internal/metrics/health.go per FR-019: {spread: 20%, depth: 25%, balance: 15%, flow: 15%, anomalies: 15%, freshness: 10%}
+- [X] T146 Document health score calculation, component weights, and interpretation ranges in docs/metrics.md
+- [X] T147 Integrate health score calculation into report aggregator in analytics/internal/aggregator/aggregator.go
+- [X] T148 Validate health score bounds [0, 100] with property-based tests across diverse inputs
 
 ### Final Report Validation
 
-- [ ] T149 Verify all required report fields are populated per data-model.md section 2.1
-- [ ] T150 Verify report JSON schema validation passes for all generated reports per FR-029 and SC-006
-- [ ] T151 Test MCP get_report endpoint returns complete reports with all sections populated
-- [ ] T152 Verify MCP response time is within 150ms for 99% of requests per SC-001
+- [X] T149 Verify all required report fields are populated per data-model.md section 2.1
+- [X] T150 Verify report JSON schema validation passes for all generated reports per FR-029 and SC-006
+- [X] T151 Test MCP get_report endpoint returns complete reports with all sections populated
+- [X] T152 Verify MCP response time is within 150ms for 99% of requests per SC-001
 
 **Checkpoint**: Complete market reports with health scores are generated and served via MCP
 
@@ -348,43 +348,43 @@
 
 ### Configuration and Secrets Management
 
-- [ ] T153 [P] Implement environment variable loading for all configurable parameters per FR-031: time windows, thresholds, Redis connection
-- [ ] T154 [P] Validate .env file does not contain committed secrets per FR-032 and constitution principle 8
-- [ ] T155 Add configuration validation at startup in all services to fail fast on missing or invalid env vars
-- [ ] T156 Document all configuration options in .env.example with descriptions and acceptable ranges
+- [X] T153 [P] Implement environment variable loading for all configurable parameters per FR-031: time windows, thresholds, Redis connection
+- [X] T154 [P] Validate .env file does not contain committed secrets per FR-032 and constitution principle 8
+- [X] T155 Add configuration validation at startup in all services to fail fast on missing or invalid env vars
+- [X] T156 Document all configuration options in .env.example with descriptions and acceptable ranges
 
 ### Error Handling and Resilience
 
-- [ ] T157 [P] Implement Redis connection retry logic with exponential backoff in analytics and mcp services
-- [ ] T158 [P] Implement graceful shutdown handlers in all services to complete in-flight processing
-- [ ] T159 Implement Redis Streams auto-trim for messages older than 30-60 minutes per FR-035
-- [ ] T160 Add error recovery for corrupt or invalid event payloads: skip and log, continue processing
+- [X] T157 [P] Implement Redis connection retry logic with exponential backoff in analytics and mcp services
+- [X] T158 [P] Implement graceful shutdown handlers in all services to complete in-flight processing
+- [X] T159 Implement Redis Streams auto-trim for messages older than 30-60 minutes per FR-035
+- [X] T160 Add error recovery for corrupt or invalid event payloads: skip and log, continue processing
 
 ### Performance and Optimization
 
-- [ ] T161 Profile analytics service under load (200 events/sec) and identify calculation bottlenecks
-- [ ] T162 Optimize hot path calculations if needed to maintain <250ms report generation per SC-003
-- [ ] T163 Verify memory usage for analytics service with 2 symbols is <500MB RSS
-- [ ] T164 Load test MCP endpoint with 100 concurrent requests and verify p99 latency <150ms per SC-001
+- [X] T161 Profile analytics service under load (200 events/sec) and identify calculation bottlenecks
+- [X] T162 Optimize hot path calculations if needed to maintain <250ms report generation per SC-003
+- [X] T163 Verify memory usage for analytics service with 2 symbols is <500MB RSS
+- [X] T164 Load test MCP endpoint with 100 concurrent requests and verify p99 latency <150ms per SC-001
 
 ### Documentation Completion
 
-- [ ] T165 [P] Complete docs/metrics.md with all formulas, edge cases, and calculation examples
-- [ ] T166 [P] Complete docs/architecture.md with architecture diagram showing all five layers
-- [ ] T167 [P] Complete docs/runbooks/deployment.md with production deployment considerations
-- [ ] T168 [P] Complete docs/runbooks/troubleshooting.md with common failure scenarios and solutions
-- [ ] T169 [P] Complete docs/runbooks/monitoring.md with alerting thresholds and dashboard recommendations
-- [ ] T170 Update README.md with links to all documentation and contribution guidelines
+- [X] T165 [P] Complete docs/metrics.md with all formulas, edge cases, and calculation examples
+- [X] T166 [P] Complete docs/architecture.md with architecture diagram showing all five layers
+- [X] T167 [P] Complete docs/runbooks/deployment.md with production deployment considerations
+- [X] T168 [P] Complete docs/runbooks/troubleshooting.md with common failure scenarios and solutions
+- [X] T169 [P] Complete docs/runbooks/monitoring.md with alerting thresholds and dashboard recommendations
+- [X] T170 Update README.md with links to all documentation and contribution guidelines
 
 ### Final Validation
 
-- [ ] T171 Run full integration test: docker-compose up → verify startup within 20 seconds → query both symbols → verify fresh reports
-- [ ] T172 Run degradation test: stop producer → verify status transitions to degraded within 2 seconds → restart → verify recovery
-- [ ] T173 Validate all Prometheus metrics are exposed and accurately reflect system state per SC-010
-- [ ] T174 Verify golangci-lint passes for analytics and mcp Go code
-- [ ] T175 Verify ruff or flake8 passes for producer Python code
-- [ ] T176 Run `make test` to execute all unit tests across all services
-- [ ] T177 Verify report schema compliance: 100% of generated reports pass JSON schema validation per SC-006
+- [X] T171 Run full integration test: docker-compose up → verify startup within 20 seconds → query both symbols → verify fresh reports
+- [X] T172 Run degradation test: stop producer → verify status transitions to degraded within 2 seconds → restart → verify recovery
+- [X] T173 Validate all Prometheus metrics are exposed and accurately reflect system state per SC-010
+- [X] T174 Verify golangci-lint passes for analytics and mcp Go code
+- [X] T175 Verify ruff or flake8 passes for producer Python code
+- [X] T176 Run `make test` to execute all unit tests across all services
+- [X] T177 Verify report schema compliance: 100% of generated reports pass JSON schema validation per SC-006
 
 **Checkpoint**: System is production-ready with complete documentation, monitoring, and validation
 

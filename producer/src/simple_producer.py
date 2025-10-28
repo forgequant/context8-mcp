@@ -35,7 +35,7 @@ class BinancePublicProducer:
         streams = []
         for symbol in self.symbols:
             streams.append(f"{symbol}@trade")  # Trade ticks
-            streams.append(f"{symbol}@bookTicker")  # Best bid/ask
+            streams.append(f"{symbol}@ticker")  # 24h statistics
             streams.append(f"{symbol}@depth20@100ms")  # Order book depth (20 levels, 100ms updates)
 
         stream_names = "/".join(streams)
@@ -95,8 +95,8 @@ class BinancePublicProducer:
             # Process based on stream type
             if stream_type == "trade":
                 self.process_trade(symbol, stream_data)
-            elif stream_type == "bookTicker":
-                self.process_book_ticker(symbol, stream_data)
+            elif stream_type == "ticker":
+                self.process_ticker_24h(symbol, stream_data)
             elif stream_type.startswith("depth"):
                 self.process_depth(symbol, stream_data)
 
@@ -113,16 +113,16 @@ class BinancePublicProducer:
         }
         self.publish_event("trade_tick", symbol, payload)
 
-    def process_book_ticker(self, symbol: str, data: dict) -> None:
-        """Process best bid/ask ticker."""
+    def process_ticker_24h(self, symbol: str, data: dict) -> None:
+        """Process 24h ticker statistics from Binance @ticker stream."""
         payload = {
-            "last_price": 0.0,  # Not available in bookTicker
-            "price_change_pct": 0.0,  # Not available in bookTicker
-            "high_24h": 0.0,  # Not available in bookTicker
-            "low_24h": 0.0,  # Not available in bookTicker
-            "volume_24h": 0.0,  # Not available in bookTicker
-            "best_bid": [float(data["b"]), float(data["B"])],  # [price, qty]
-            "best_ask": [float(data["a"]), float(data["A"])],  # [price, qty]
+            "last_price": float(data["c"]),  # Last price
+            "price_change_pct": float(data["P"]),  # Price change percent (24h)
+            "high_24h": float(data["h"]),  # High price (24h)
+            "low_24h": float(data["l"]),  # Low price (24h)
+            "volume_24h": float(data["v"]),  # Total traded base asset volume (24h)
+            "best_bid": [float(data["b"]), float(data["B"])],  # Best bid [price, qty]
+            "best_ask": [float(data["a"]), float(data["A"])],  # Best ask [price, qty]
         }
         self.publish_event("ticker_24h", symbol, payload)
 
@@ -152,22 +152,43 @@ class BinancePublicProducer:
         log.info("websocket_connected", url=self.ws_url)
 
     def run(self) -> None:
-        """Start the WebSocket connection and run forever."""
+        """Start the WebSocket connection and run forever with automatic reconnection."""
         log.info("producer_starting", url=self.ws_url)
 
-        ws = websocket.WebSocketApp(
-            self.ws_url,
-            on_message=self.on_message,
-            on_error=self.on_error,
-            on_close=self.on_close,
-            on_open=self.on_open,
-        )
+        retry_count = 0
+        max_backoff = 60  # Max 60 seconds between retries
 
-        # Run forever with automatic reconnection
-        ws.run_forever(
-            ping_interval=20,  # Send ping every 20s
-            ping_timeout=10,  # Wait 10s for pong
-        )
+        while True:
+            try:
+                ws = websocket.WebSocketApp(
+                    self.ws_url,
+                    on_message=self.on_message,
+                    on_error=self.on_error,
+                    on_close=self.on_close,
+                    on_open=self.on_open,
+                )
+
+                # Run with relaxed heartbeat settings to reduce timeout issues
+                ws.run_forever(
+                    ping_interval=30,  # Send ping every 30s (was 20s)
+                    ping_timeout=20,  # Wait 20s for pong (was 10s)
+                )
+
+                # If we exit normally, it was likely a deliberate close
+                log.info("websocket_closed_normally")
+                break
+
+            except Exception as e:
+                retry_count += 1
+                backoff = min(2 ** retry_count, max_backoff)  # Exponential backoff
+                log.warning(
+                    "websocket_reconnecting",
+                    error=str(e),
+                    retry_count=retry_count,
+                    backoff_seconds=backoff,
+                )
+                time.sleep(backoff)
+                continue
 
 
 def main():

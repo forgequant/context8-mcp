@@ -18,6 +18,22 @@ from nautilus_trader.model.identifiers import InstrumentId
 log = structlog.get_logger()
 
 
+def _nanoseconds_to_rfc3339(nanos: int) -> str:
+    """Convert Unix nanoseconds to RFC3339 timestamp string.
+
+    Args:
+        nanos: Unix timestamp in nanoseconds
+
+    Returns:
+        RFC3339 formatted string (e.g., 2025-10-28T12:00:00.123456Z)
+    """
+    from datetime import datetime, timezone
+    seconds = nanos / 1_000_000_000
+    dt = datetime.fromtimestamp(seconds, tz=timezone.utc)
+    # Format with microseconds and Z suffix for UTC
+    return dt.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+
+
 @dataclass
 class MarketEventEnvelope:
     """Envelope for market events published to Redis Streams.
@@ -28,7 +44,7 @@ class MarketEventEnvelope:
     symbol: str
     venue: str
     type: str
-    ts_event: int  # Unix timestamp in nanoseconds
+    ts_event: str  # RFC3339 timestamp (e.g., 2025-10-28T12:00:00.123456Z)
     payload: dict[str, Any]
 
 
@@ -162,7 +178,7 @@ class RedisPublisher:
             symbol=instrument_id.symbol.value,
             venue=instrument_id.venue.value,
             type="trade_tick",
-            ts_event=tick.ts_event,
+            ts_event=_nanoseconds_to_rfc3339(tick.ts_event),
             payload={
                 "price": str(tick.price),
                 "size": str(tick.size),
@@ -182,7 +198,7 @@ class RedisPublisher:
             symbol=instrument_id.symbol.value,
             venue=instrument_id.venue.value,
             type="ticker_24h",
-            ts_event=tick.ts_event,
+            ts_event=_nanoseconds_to_rfc3339(tick.ts_event),
             payload={
                 "bid_price": str(tick.bid_price),
                 "bid_size": str(tick.bid_size),
@@ -212,7 +228,7 @@ class RedisPublisher:
             symbol=instrument_id.symbol.value,
             venue=instrument_id.venue.value,
             type="order_book_deltas",
-            ts_event=deltas.ts_event,
+            ts_event=_nanoseconds_to_rfc3339(deltas.ts_event),
             payload={
                 "deltas": delta_list,
             }

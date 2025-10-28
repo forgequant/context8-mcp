@@ -153,19 +153,40 @@ func (a *Aggregator) processTradeTick(state *SymbolState, envelope *models.Marke
 	var price, qty float64
 	var isBuy bool
 
-	if priceStr, ok := payload["price"].(string); ok {
-		fmt.Sscanf(priceStr, "%f", &price)
+	// Extract price (support both string and number)
+	if priceVal, ok := payload["price"]; ok {
+		switch p := priceVal.(type) {
+		case float64:
+			price = p
+		case string:
+			fmt.Sscanf(p, "%f", &price)
+		}
 		state.LastPrice = price
 	}
 
-	// Extract trade details for flow tracking (Phase 6 - T100)
-	if qtyStr, ok := payload["size"].(string); ok {
-		fmt.Sscanf(qtyStr, "%f", &qty)
+	// Extract qty (support both "qty" and "size", both string and number)
+	if qtyVal, ok := payload["qty"]; ok {
+		switch q := qtyVal.(type) {
+		case float64:
+			qty = q
+		case string:
+			fmt.Sscanf(q, "%f", &qty)
+		}
+	} else if qtyVal, ok := payload["size"]; ok {
+		switch q := qtyVal.(type) {
+		case float64:
+			qty = q
+		case string:
+			fmt.Sscanf(q, "%f", &qty)
+		}
 	}
 
-	// Determine aggressor side
-	// In NautilusTrader, aggressor_side can be "BUY" or "SELL" (from trade tick)
-	if aggressorSide, ok := payload["aggressor_side"].(string); ok {
+	// Determine aggressor side (support both "side" and "aggressor_side")
+	if sideVal, ok := payload["side"]; ok {
+		if sideStr, ok := sideVal.(string); ok {
+			isBuy = (sideStr == "buy" || sideStr == "BUY" || sideStr == "BUYER")
+		}
+	} else if aggressorSide, ok := payload["aggressor_side"].(string); ok {
 		isBuy = (aggressorSide == "BUY" || aggressorSide == "BUYER")
 	}
 
@@ -202,21 +223,115 @@ func (a *Aggregator) processTicker24h(state *SymbolState, envelope *models.Marke
 		return
 	}
 
-	// Extract best bid/ask from ticker (comes as arrays [price, qty] from producer)
+	// Extract 24h statistics (T058)
+	if lastPriceVal, ok := payload["last_price"]; ok {
+		switch v := lastPriceVal.(type) {
+		case float64:
+			state.LastPrice = v
+		case string:
+			fmt.Sscanf(v, "%f", &state.LastPrice)
+		}
+	}
+	if changePctVal, ok := payload["price_change_pct"]; ok {
+		switch v := changePctVal.(type) {
+		case float64:
+			state.Change24hPct = v
+		case string:
+			fmt.Sscanf(v, "%f", &state.Change24hPct)
+		}
+	}
+	if high24hVal, ok := payload["high_24h"]; ok {
+		switch v := high24hVal.(type) {
+		case float64:
+			state.High24h = v
+		case string:
+			fmt.Sscanf(v, "%f", &state.High24h)
+		}
+	}
+	if low24hVal, ok := payload["low_24h"]; ok {
+		switch v := low24hVal.(type) {
+		case float64:
+			state.Low24h = v
+		case string:
+			fmt.Sscanf(v, "%f", &state.Low24h)
+		}
+	}
+	if volume24hVal, ok := payload["volume_24h"]; ok {
+		switch v := volume24hVal.(type) {
+		case float64:
+			state.Volume24h = v
+		case string:
+			fmt.Sscanf(v, "%f", &state.Volume24h)
+		}
+	}
+
+	// Extract best bid/ask from ticker
+	// Support two formats:
+	// 1. Arrays: "best_bid": [price, qty] (simple producer)
+	// 2. Separate fields: "bid_price", "bid_size" (Nautilus producer)
+	var bidPrice, bidQty, askPrice, askQty float64
+
+	// Try array format first
 	if bestBidRaw, ok := payload["best_bid"].([]interface{}); ok && len(bestBidRaw) >= 2 {
-		bidPrice, _ := bestBidRaw[0].(float64)
-		bidQty, _ := bestBidRaw[1].(float64)
-		if bidPrice > 0 && bidQty > 0 {
-			state.Bids = [][2]float64{{bidPrice, bidQty}}
+		if p, ok := bestBidRaw[0].(float64); ok {
+			bidPrice = p
+		}
+		if q, ok := bestBidRaw[1].(float64); ok {
+			bidQty = q
+		}
+	} else {
+		// Try separate fields format (Nautilus)
+		if bidPriceVal, ok := payload["bid_price"]; ok {
+			switch p := bidPriceVal.(type) {
+			case float64:
+				bidPrice = p
+			case string:
+				fmt.Sscanf(p, "%f", &bidPrice)
+			}
+		}
+		if bidSizeVal, ok := payload["bid_size"]; ok {
+			switch q := bidSizeVal.(type) {
+			case float64:
+				bidQty = q
+			case string:
+				fmt.Sscanf(q, "%f", &bidQty)
+			}
 		}
 	}
 
 	if bestAskRaw, ok := payload["best_ask"].([]interface{}); ok && len(bestAskRaw) >= 2 {
-		askPrice, _ := bestAskRaw[0].(float64)
-		askQty, _ := bestAskRaw[1].(float64)
-		if askPrice > 0 && askQty > 0 {
-			state.Asks = [][2]float64{{askPrice, askQty}}
+		if p, ok := bestAskRaw[0].(float64); ok {
+			askPrice = p
 		}
+		if q, ok := bestAskRaw[1].(float64); ok {
+			askQty = q
+		}
+	} else {
+		// Try separate fields format (Nautilus)
+		if askPriceVal, ok := payload["ask_price"]; ok {
+			switch p := askPriceVal.(type) {
+			case float64:
+				askPrice = p
+			case string:
+				fmt.Sscanf(p, "%f", &askPrice)
+			}
+		}
+		if askSizeVal, ok := payload["ask_size"]; ok {
+			switch q := askSizeVal.(type) {
+			case float64:
+				askQty = q
+			case string:
+				fmt.Sscanf(q, "%f", &askQty)
+			}
+		}
+	}
+
+	// Update state with best bid/ask
+	if bidPrice > 0 && bidQty > 0 {
+		state.Bids = [][2]float64{{bidPrice, bidQty}}
+	}
+	if askPrice > 0 && askQty > 0 {
+		state.Asks = [][2]float64{{askPrice, askQty}}
 	}
 }
 
@@ -233,19 +348,50 @@ func (a *Aggregator) processOrderBookDepth(state *SymbolState, envelope *models.
 		bids := make([][2]float64, 0, len(bidsRaw))
 		quantities := make([]float64, 0, len(bidsRaw))
 		for _, bidRaw := range bidsRaw {
-			bidMap, ok := bidRaw.(map[string]interface{})
-			if !ok {
+			var price, qty float64
+
+			// Try parsing as array [price, qty] first (primary format per schema)
+			if bidArray, ok := bidRaw.([]interface{}); ok && len(bidArray) >= 2 {
+				// Extract price
+				switch p := bidArray[0].(type) {
+				case float64:
+					price = p
+				case string:
+					fmt.Sscanf(p, "%f", &price)
+				}
+				// Extract qty
+				switch q := bidArray[1].(type) {
+				case float64:
+					qty = q
+				case string:
+					fmt.Sscanf(q, "%f", &qty)
+				}
+			} else if bidMap, ok := bidRaw.(map[string]interface{}); ok {
+				// Fallback: parse as map {"price": "...", "size": "..."} for backward compatibility
+				if priceVal, ok := bidMap["price"]; ok {
+					switch p := priceVal.(type) {
+					case float64:
+						price = p
+					case string:
+						fmt.Sscanf(p, "%f", &price)
+					}
+				}
+				if qtyVal, ok := bidMap["size"]; ok {
+					switch q := qtyVal.(type) {
+					case float64:
+						qty = q
+					case string:
+						fmt.Sscanf(q, "%f", &qty)
+					}
+				}
+			} else {
 				continue
 			}
-			var price, qty float64
-			if priceStr, ok := bidMap["price"].(string); ok {
-				fmt.Sscanf(priceStr, "%f", &price)
+
+			if price > 0 && qty > 0 {
+				bids = append(bids, [2]float64{price, qty})
+				quantities = append(quantities, qty)
 			}
-			if qtyStr, ok := bidMap["size"].(string); ok {
-				fmt.Sscanf(qtyStr, "%f", &qty)
-			}
-			bids = append(bids, [2]float64{price, qty})
-			quantities = append(quantities, qty)
 		}
 		state.Bids = bids
 
@@ -260,19 +406,50 @@ func (a *Aggregator) processOrderBookDepth(state *SymbolState, envelope *models.
 		asks := make([][2]float64, 0, len(asksRaw))
 		quantities := make([]float64, 0, len(asksRaw))
 		for _, askRaw := range asksRaw {
-			askMap, ok := askRaw.(map[string]interface{})
-			if !ok {
+			var price, qty float64
+
+			// Try parsing as array [price, qty] first (primary format per schema)
+			if askArray, ok := askRaw.([]interface{}); ok && len(askArray) >= 2 {
+				// Extract price
+				switch p := askArray[0].(type) {
+				case float64:
+					price = p
+				case string:
+					fmt.Sscanf(p, "%f", &price)
+				}
+				// Extract qty
+				switch q := askArray[1].(type) {
+				case float64:
+					qty = q
+				case string:
+					fmt.Sscanf(q, "%f", &qty)
+				}
+			} else if askMap, ok := askRaw.(map[string]interface{}); ok {
+				// Fallback: parse as map {"price": "...", "size": "..."} for backward compatibility
+				if priceVal, ok := askMap["price"]; ok {
+					switch p := priceVal.(type) {
+					case float64:
+						price = p
+					case string:
+						fmt.Sscanf(p, "%f", &price)
+					}
+				}
+				if qtyVal, ok := askMap["size"]; ok {
+					switch q := qtyVal.(type) {
+					case float64:
+						qty = q
+					case string:
+						fmt.Sscanf(q, "%f", &qty)
+					}
+				}
+			} else {
 				continue
 			}
-			var price, qty float64
-			if priceStr, ok := askMap["price"].(string); ok {
-				fmt.Sscanf(priceStr, "%f", &price)
+
+			if price > 0 && qty > 0 {
+				asks = append(asks, [2]float64{price, qty})
+				quantities = append(quantities, qty)
 			}
-			if qtyStr, ok := askMap["size"].(string); ok {
-				fmt.Sscanf(qtyStr, "%f", &qty)
-			}
-			asks = append(asks, [2]float64{price, qty})
-			quantities = append(quantities, qty)
 		}
 		state.Asks = asks
 
@@ -291,11 +468,159 @@ func (a *Aggregator) processOrderBookDepth(state *SymbolState, envelope *models.
 	}
 }
 
-// processOrderBookDeltas updates order book from deltas (simplified MVP version).
+// processOrderBookDeltas updates order book from deltas.
+// Per FR-002, FR-014, and data-model.md section 1.4:
+// - Deltas applied to existing snapshot
+// - Idempotency: Last update wins for a given price level
+// - qty=0 means delete the level
 func (a *Aggregator) processOrderBookDeltas(state *SymbolState, envelope *models.MarketEventEnvelope) {
-	// For MVP, skip delta processing and rely on periodic depth snapshots
-	// Full delta application will be implemented in later phases
-	a.logger.Debug("order_book_deltas_skipped", "symbol", state.Symbol)
+	payload, ok := envelope.Payload.(map[string]interface{})
+	if !ok {
+		a.logger.Error("invalid_deltas_payload", "symbol", state.Symbol)
+		return
+	}
+
+	// Parse bid updates
+	bidUpdates := make(map[float64]float64) // price -> qty
+	if bidsUpdRaw, ok := payload["bids_upd"].([]interface{}); ok {
+		for _, deltaRaw := range bidsUpdRaw {
+			if deltaArray, ok := deltaRaw.([]interface{}); ok && len(deltaArray) >= 2 {
+				var price, qty float64
+				switch p := deltaArray[0].(type) {
+				case float64:
+					price = p
+				case string:
+					fmt.Sscanf(p, "%f", &price)
+				}
+				switch q := deltaArray[1].(type) {
+				case float64:
+					qty = q
+				case string:
+					fmt.Sscanf(q, "%f", &qty)
+				}
+				if price > 0 {
+					bidUpdates[price] = qty
+				}
+			}
+		}
+	}
+
+	// Parse ask updates
+	askUpdates := make(map[float64]float64)
+	if asksUpdRaw, ok := payload["asks_upd"].([]interface{}); ok {
+		for _, deltaRaw := range asksUpdRaw {
+			if deltaArray, ok := deltaRaw.([]interface{}); ok && len(deltaArray) >= 2 {
+				var price, qty float64
+				switch p := deltaArray[0].(type) {
+				case float64:
+					price = p
+				case string:
+					fmt.Sscanf(p, "%f", &price)
+				}
+				switch q := deltaArray[1].(type) {
+				case float64:
+					qty = q
+				case string:
+					fmt.Sscanf(q, "%f", &qty)
+				}
+				if price > 0 {
+					askUpdates[price] = qty
+				}
+			}
+		}
+	}
+
+	// Apply bid deltas to existing order book
+	bidMap := make(map[float64]float64)
+	for _, level := range state.Bids {
+		bidMap[level[0]] = level[1]
+	}
+	for price, qty := range bidUpdates {
+		if qty == 0 {
+			delete(bidMap, price) // Remove level
+		} else {
+			bidMap[price] = qty // Update or add
+		}
+	}
+
+	// Apply ask deltas
+	askMap := make(map[float64]float64)
+	for _, level := range state.Asks {
+		askMap[level[0]] = level[1]
+	}
+	for price, qty := range askUpdates {
+		if qty == 0 {
+			delete(askMap, price)
+		} else {
+			askMap[price] = qty
+		}
+	}
+
+	// Rebuild sorted arrays
+	bids := make([][2]float64, 0, len(bidMap))
+	for price, qty := range bidMap {
+		bids = append(bids, [2]float64{price, qty})
+	}
+	// Sort bids descending (highest price first)
+	for i := 0; i < len(bids); i++ {
+		for j := i + 1; j < len(bids); j++ {
+			if bids[j][0] > bids[i][0] {
+				bids[i], bids[j] = bids[j], bids[i]
+			}
+		}
+	}
+
+	asks := make([][2]float64, 0, len(askMap))
+	for price, qty := range askMap {
+		asks = append(asks, [2]float64{price, qty})
+	}
+	// Sort asks ascending (lowest price first)
+	for i := 0; i < len(asks); i++ {
+		for j := i + 1; j < len(asks); j++ {
+			if asks[j][0] < asks[i][0] {
+				asks[i], asks[j] = asks[j], asks[i]
+			}
+		}
+	}
+
+	// Keep only top 20 levels
+	if len(bids) > 20 {
+		bids = bids[:20]
+	}
+	if len(asks) > 20 {
+		asks = asks[:20]
+	}
+
+	state.Bids = bids
+	state.Asks = asks
+
+	// Update liquidity analyzer with quantities
+	if state.LiquidityAnalyzer != nil {
+		bidQuantities := make([]float64, len(bids))
+		for i, level := range bids {
+			bidQuantities[i] = level[1]
+		}
+		if len(bidQuantities) > 0 {
+			state.LiquidityAnalyzer.UpdateQuantities(bidQuantities)
+		}
+	}
+
+	// Update anomaly detector
+	if state.AnomalyDetector != nil && len(bids) > 0 && len(asks) > 0 {
+		bidsForDetector := convertToModels(bids)
+		asksForDetector := convertToModels(asks)
+		if len(bidsForDetector) > 0 && len(asksForDetector) > 0 {
+			midPrice := (bidsForDetector[0].Price + asksForDetector[0].Price) / 2
+			state.AnomalyDetector.UpdateOrderBook(
+				envelope.TsEvent.UnixMilli(),
+				bidsForDetector,
+				asksForDetector,
+				midPrice,
+			)
+		}
+	}
+
+	a.logger.Debug("deltas_applied", "symbol", state.Symbol, "bid_updates", len(bidUpdates), "ask_updates", len(askUpdates))
 }
 
 // updateIngestionStatus implements the state machine for ingestion health (Phase 5 - US5).

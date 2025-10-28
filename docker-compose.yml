@@ -20,6 +20,7 @@ services:
       context: ./producer
       dockerfile: Dockerfile
     container_name: context8-producer
+    restart: unless-stopped
     depends_on:
       redis:
         condition: service_healthy
