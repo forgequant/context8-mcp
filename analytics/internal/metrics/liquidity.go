@@ -300,11 +300,22 @@ func (la *LiquidityAnalyzer) CalculateVolumeProfile(currentTime int64) (models.V
 	}
 
 	// Calculate bin size based on price range and tick size
-	tickSize := (maxPrice - minPrice) / 200 // Approximate tick size
+	priceRange := maxPrice - minPrice
+	if priceRange <= 0 {
+		// All trades at same price - cannot calculate volume profile
+		return models.VolumeProfile{}, fmt.Errorf("insufficient price range for volume profile (range=%f)", priceRange)
+	}
+
+	tickSize := priceRange / 200 // Approximate tick size
 	binSize := tickSize * float64(la.config.VolumeBinWidth)
 
 	if binSize <= 0 {
-		binSize = (maxPrice - minPrice) / 50 // Fallback
+		binSize = priceRange / 50 // Fallback
+	}
+
+	// Safety check: binSize must be positive to avoid NaN
+	if binSize <= 0 || math.IsNaN(binSize) || math.IsInf(binSize, 0) {
+		return models.VolumeProfile{}, fmt.Errorf("invalid bin size calculated: %f", binSize)
 	}
 
 	// Aggregate volume into bins
