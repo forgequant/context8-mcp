@@ -107,16 +107,16 @@ class MarketAnalyticsStrategy(Strategy):
 
             self.lease_manager = LeaseManager(
                 redis_client=self.redis_client,
-                ttl_ms=self.lease_ttl_ms
+                node_id=self.node_id
             )
 
             self.assignment_controller = SymbolAssignmentController(
-                redis_client=self.redis_client,
-                node_id=self.node_id,
-                all_symbols=self.symbols,
+                membership=self.membership,
                 lease_manager=self.lease_manager,
-                sticky_pct=config.hrw_sticky_pct,
-                min_hold_ms=config.min_hold_ms
+                symbols=self.symbols,
+                lease_ttl_ms=self.lease_ttl_ms,
+                min_hold_ms=config.min_hold_ms,
+                sticky_pct=config.hrw_sticky_pct
             )
 
             self.log.info(
@@ -142,13 +142,13 @@ class MarketAnalyticsStrategy(Strategy):
             self.log.info("Starting coordination tasks (heartbeat, rebalance, lease renewal)")
 
             # Start heartbeat loop
-            self._heartbeat_task = self.create_task(self._heartbeat_loop_async())
+            self._heartbeat_task = asyncio.create_task(self._heartbeat_loop_async())
 
             # Start rebalancing loop
-            self._rebalance_task = self.create_task(self._rebalance_loop_async())
+            self._rebalance_task = asyncio.create_task(self._rebalance_loop_async())
 
             # Start lease renewal loop
-            self._lease_renewal_task = self.create_task(self._lease_renewal_loop_async())
+            self._lease_renewal_task = asyncio.create_task(self._lease_renewal_loop_async())
 
             # In coordination mode, symbols are acquired dynamically via rebalancing
             # Initial rebalance will happen soon

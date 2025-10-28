@@ -215,8 +215,8 @@ def main():
                 update_instruments_interval_mins=60,
                 use_agg_trade_ticks=False,  # Use raw trade ticks per constitution
                 instrument_provider=InstrumentProviderConfig(
-                    load_all=False,
-                    load_ids=frozenset(f"{symbol}.BINANCE" for symbol in config.symbols),
+                    load_all=False,  # Don't auto-load any instruments
+                    load_ids=frozenset(),  # Empty set - we load manually via public API
                 ),
             ),
         },

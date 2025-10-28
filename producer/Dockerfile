@@ -21,6 +21,9 @@ RUN poetry config virtualenvs.create false \
 # Copy source code
 COPY src/ ./src/
 
+# Copy Lua scripts for lease management
+COPY lua/ ./lua/
+
 # Install the package
 RUN poetry install --no-interaction --no-ansi
 
