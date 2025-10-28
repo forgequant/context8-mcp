@@ -70,11 +70,11 @@ class SymbolAssignmentController:
         """
         self.on_dropped_callbacks.append(callback)
 
-    def rebalance(self) -> Dict[str, str]:
+    def rebalance(self) -> Dict[str, List[str]]:
         """Execute rebalancing cycle: compute assignments and acquire/release as needed.
 
         Returns:
-            Dictionary of new assignments {symbol: node_id}
+            Dictionary with "acquire" and "release" lists: {"acquire": [...], "release": [...]}
         """
         try:
             # Discover active cluster members
@@ -82,7 +82,7 @@ class SymbolAssignmentController:
 
             if not active_node_ids:
                 logger.warning("rebalance_no_active_nodes")
-                return {}
+                return {"acquire": [], "release": []}
 
             # Calculate desired assignments using HRW
             desired_assignments = {}
@@ -135,11 +135,11 @@ class SymbolAssignmentController:
                 released=len(to_release)
             )
 
-            return desired_assignments
+            return {"acquire": list(to_acquire), "release": list(to_release)}
 
         except Exception as e:
             logger.error("rebalance_failed", error=str(e), exc_info=True)
-            return {}
+            return {"acquire": [], "release": []}
 
     def _acquire_symbol(self, symbol: str) -> bool:
         """Attempt to acquire lease for symbol.

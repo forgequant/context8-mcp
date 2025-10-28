@@ -85,11 +85,14 @@ class LeaseManager:
             else:
                 # Lease held by another node
                 current_owner = self.redis.get(lease_key)
+                # redis-py 5.x returns strings by default
+                if isinstance(current_owner, bytes):
+                    current_owner = current_owner.decode()
                 logger.debug(
                     "lease_acquisition_failed",
                     symbol=symbol,
                     node_id=self.node_id,
-                    current_owner=current_owner.decode() if current_owner else None
+                    current_owner=current_owner
                 )
                 return None
 
@@ -121,11 +124,14 @@ class LeaseManager:
                 logger.debug("lease_renewed", symbol=symbol, node_id=self.node_id)
             else:
                 current_owner = self.redis.get(lease_key)
+                # redis-py 5.x returns strings by default
+                if isinstance(current_owner, bytes):
+                    current_owner = current_owner.decode()
                 logger.warning(
                     "lease_renewal_failed",
                     symbol=symbol,
                     node_id=self.node_id,
-                    current_owner=current_owner.decode() if current_owner else None
+                    current_owner=current_owner
                 )
 
             return renewed
@@ -176,7 +182,10 @@ class LeaseManager:
         lease_key = f"report:writer:{symbol}"
         try:
             owner = self.redis.get(lease_key)
-            return owner.decode() if owner else None
+            # redis-py 5.x returns strings by default (not bytes)
+            if isinstance(owner, bytes):
+                return owner.decode()
+            return owner if owner else None
         except Exception as e:
             logger.error("get_owner_error", symbol=symbol, error=str(e))
             return None

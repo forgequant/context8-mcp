@@ -545,7 +545,7 @@ class MarketAnalyticsStrategy(Strategy):
 
                 for symbol in list(self.owned_symbols):
                     try:
-                        renewed = self.lease_manager.renew(symbol, self.node_id)
+                        renewed = self.lease_manager.renew(symbol, self.lease_ttl_ms)
 
                         if not renewed:
                             # Lost lease ownership - mark for dropping
@@ -582,23 +582,23 @@ class MarketAnalyticsStrategy(Strategy):
     async def _on_symbol_acquired_async(self, symbol: str):
         """Handler: Symbol acquired via rebalancing.
 
-        1. Acquire lease
+        1. Get token from assignment controller (lease already acquired)
         2. Initialize state
         3. Subscribe to market data
         4. Mark as owned
         """
         try:
-            # Acquire lease
-            if self.lease_manager:
-                token = self.lease_manager.acquire(symbol, self.node_id)
+            # Get token from assignment controller (lease already acquired by rebalance)
+            if self.assignment_controller:
+                token = self.assignment_controller.get_token_for_symbol(symbol)
                 if token is None:
                     self.log.warning(
-                        f"symbol_acquire_failed_lease: {symbol}, could not acquire lease"
+                        f"symbol_acquire_failed_no_token: {symbol}, no token from assignment controller"
                     )
                     return
 
                 self.writer_tokens[symbol] = token
-                self.log.info(f"lease_acquired: symbol={symbol}, token={token}")
+                self.log.info(f"token_retrieved: symbol={symbol}, token={token}")
 
             # Initialize symbol state
             self._initialize_symbol(symbol)
@@ -632,7 +632,7 @@ class MarketAnalyticsStrategy(Strategy):
 
             # Release lease
             if self.lease_manager:
-                released = self.lease_manager.release(symbol, self.node_id)
+                released = self.lease_manager.release(symbol)
                 if released:
                     self.log.info(f"lease_released: {symbol}")
                 else:
@@ -735,7 +735,7 @@ class MarketAnalyticsStrategy(Strategy):
             if self.lease_manager:
                 for symbol in list(self.owned_symbols):
                     try:
-                        released = self.lease_manager.release(symbol, self.node_id)
+                        released = self.lease_manager.release(symbol)
                         if released:
                             self.log.info(f"lease_released_on_shutdown: {symbol}")
                     except Exception as e:
