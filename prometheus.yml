@@ -3,12 +3,13 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: 'analytics'
+  - job_name: 'producer'
     static_configs:
-      - targets: ['analytics:9091']
+      - targets: ['producer:9101']
         labels:
-          service: 'analytics'
+          service: 'producer'
           component: 'context8'
+          feature: 'embedded-analytics'
 
   - job_name: 'mcp'
     static_configs:

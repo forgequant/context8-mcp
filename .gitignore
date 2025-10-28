@@ -64,3 +64,4 @@ producer/dist/
 # Temporary files
 tmp/
 temp/
+analytics.deprecated/

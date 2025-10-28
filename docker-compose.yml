@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   redis:
     image: redis:7-alpine
@@ -24,39 +22,25 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    ports:
+      - "${NT_METRICS_PORT:-9101}:9101"  # Prometheus metrics for analytics
     env_file:
       - .env
     environment:
       REDIS_URL: redis://redis:6379
       STREAM_KEY: ${STREAM_KEY:-nt:binance}
+      # Embedded Analytics Configuration (Feature 002-nt-embedded-analytics)
+      NT_ENABLE_KV_REPORTS: ${NT_ENABLE_KV_REPORTS:-true}
+      NT_ENABLE_STREAMS: ${NT_ENABLE_STREAMS:-true}
+      NT_REPORT_PERIOD_MS: ${NT_REPORT_PERIOD_MS:-250}
+      NT_SLOW_PERIOD_MS: ${NT_SLOW_PERIOD_MS:-2000}
+      NT_LEASE_TTL_MS: ${NT_LEASE_TTL_MS:-2000}
+      NT_NODE_ID: ${NT_NODE_ID:-nt-producer-001}
+      NT_HRW_STICKY_PCT: ${NT_HRW_STICKY_PCT:-0.02}
+      NT_MIN_HOLD_MS: ${NT_MIN_HOLD_MS:-2000}
+      NT_METRICS_PORT: ${NT_METRICS_PORT:-9101}
     healthcheck:
       test: ["CMD", "python", "-c", "print('ok')"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-    networks:
-      - context8-network
-
-  analytics:
-    build:
-      context: ./analytics
-      dockerfile: Dockerfile
-    container_name: context8-analytics
-    depends_on:
-      redis:
-        condition: service_healthy
-      producer:
-        condition: service_started
-    env_file:
-      - .env
-    environment:
-      REDIS_URL: redis://redis:6379
-      CONSUMER_GROUP: ${CONSUMER_GROUP:-context8}
-      STREAM_KEY: ${STREAM_KEY:-nt:binance}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-    healthcheck:
-      test: ["CMD", "pgrep", "-f", "analytics"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -72,8 +56,6 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      analytics:
-        condition: service_started
     ports:
       - "8080:8080"
     env_file:
@@ -91,25 +73,25 @@ services:
     networks:
       - context8-network
 
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: context8-prometheus
-    ports:
-      - "${PROMETHEUS_PORT:-9090}:9090"
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    networks:
-      - context8-network
+  #prometheus:
+  #  image: prom/prometheus:latest
+  #  container_name: context8-prometheus
+  #  ports:
+  #    - "${PROMETHEUS_PORT:-9090}:9090"
+  #  volumes:
+  #    - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  #  command:
+  #    - '--config.file=/etc/prometheus/prometheus.yml'
+  #    - '--storage.tsdb.path=/prometheus'
+  #    - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+  #    - '--web.console.templates=/usr/share/prometheus/consoles'
+  #  healthcheck:
+  #    test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+  #    interval: 10s
+  #    timeout: 5s
+  #    retries: 3
+  #  networks:
+  #    - context8-network
 
 networks:
   context8-network:

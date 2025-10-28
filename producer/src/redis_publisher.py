@@ -217,7 +217,7 @@ class RedisPublisher:
         delta_list = []
         for delta in deltas.deltas:
             delta_list.append({
-                "side": delta.side.name,
+                "side": delta.order.side.name,
                 "action": delta.action.name,
                 "price": str(delta.order.price),
                 "size": str(delta.order.size),

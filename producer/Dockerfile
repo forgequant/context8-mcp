@@ -27,5 +27,5 @@ RUN poetry install --no-interaction --no-ansi
 # Health check endpoint port
 EXPOSE 8000
 
-# Run the producer
-CMD ["python", "-m", "src.simple_producer"]
+# Run the producer (main.py with NautilusTrader + analytics)
+CMD ["python", "-m", "src.main"]

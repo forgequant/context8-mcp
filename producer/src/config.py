@@ -26,11 +26,28 @@ class ProducerConfig:
     # Observability
     log_level: str = "info"
 
+    # Embedded Analytics (Feature: 002-nt-embedded-analytics)
+    nt_enable_kv_reports: bool = False
+    nt_enable_streams: bool = True
+    nt_report_period_ms: int = 250
+    nt_slow_period_ms: int = 2000
+    nt_lease_ttl_ms: int = 2000
+    nt_node_id: str = ""
+    nt_hrw_sticky_pct: float = 0.02
+    nt_min_hold_ms: int = 2000
+    nt_metrics_port: int = 9101
+
     @classmethod
     def from_env(cls) -> "ProducerConfig":
         """Load configuration from environment variables."""
         symbols_str = os.getenv("SYMBOLS", "BTCUSDT,ETHUSDT")
         symbols = [s.strip() for s in symbols_str.split(",")]
+
+        # Generate node_id if not provided
+        import socket
+        node_id = os.getenv("NT_NODE_ID", "")
+        if not node_id:
+            node_id = f"nt-{socket.gethostname()}-{os.getpid()}"
 
         return cls(
             binance_api_key=os.getenv("BINANCE_API_KEY", ""),
@@ -40,6 +57,15 @@ class ProducerConfig:
             stream_key=os.getenv("STREAM_KEY", "nt:binance"),
             symbols=symbols,
             log_level=os.getenv("LOG_LEVEL", "info").lower(),
+            nt_enable_kv_reports=os.getenv("NT_ENABLE_KV_REPORTS", "false").lower() == "true",
+            nt_enable_streams=os.getenv("NT_ENABLE_STREAMS", "true").lower() == "true",
+            nt_report_period_ms=int(os.getenv("NT_REPORT_PERIOD_MS", "250")),
+            nt_slow_period_ms=int(os.getenv("NT_SLOW_PERIOD_MS", "2000")),
+            nt_lease_ttl_ms=int(os.getenv("NT_LEASE_TTL_MS", "2000")),
+            nt_node_id=node_id,
+            nt_hrw_sticky_pct=float(os.getenv("NT_HRW_STICKY_PCT", "0.02")),
+            nt_min_hold_ms=int(os.getenv("NT_MIN_HOLD_MS", "2000")),
+            nt_metrics_port=int(os.getenv("NT_METRICS_PORT", "9101")),
         )
 
     def validate(self) -> None:
@@ -53,3 +79,41 @@ class ProducerConfig:
 
         if self.log_level not in ["debug", "info", "warn", "error"]:
             raise ValueError(f"Invalid log level: {self.log_level}")
+
+        # Validate analytics configuration
+        if self.nt_enable_kv_reports:
+            if self.nt_report_period_ms < 100 or self.nt_report_period_ms > 1000:
+                raise ValueError(f"NT_REPORT_PERIOD_MS must be 100-1000ms, got {self.nt_report_period_ms}")
+
+            if self.nt_slow_period_ms < 1000:
+                raise ValueError(f"NT_SLOW_PERIOD_MS must be >= 1000ms, got {self.nt_slow_period_ms}")
+
+            if self.nt_lease_ttl_ms < 2 * (self.nt_report_period_ms):
+                raise ValueError(f"NT_LEASE_TTL_MS must be >= 2x report period for safe renewal")
+
+            if not 0 <= self.nt_hrw_sticky_pct <= 0.1:
+                raise ValueError(f"NT_HRW_STICKY_PCT must be 0-0.1 (0-10%), got {self.nt_hrw_sticky_pct}")
+
+            if not self.nt_node_id:
+                raise ValueError("NT_NODE_ID must be set when analytics enabled")
+
+    def get_analytics_config(self) -> dict:
+        """Get analytics configuration as dictionary.
+
+        Returns:
+            Dictionary with all analytics configuration fields
+        """
+        return {
+            "enabled": self.nt_enable_kv_reports,
+            "enable_streams": self.nt_enable_streams,
+            "node_id": self.nt_node_id,
+            "report_period_ms": self.nt_report_period_ms,
+            "slow_period_ms": self.nt_slow_period_ms,
+            "lease_ttl_ms": self.nt_lease_ttl_ms,
+            "hrw_sticky_pct": self.nt_hrw_sticky_pct,
+            "min_hold_ms": self.nt_min_hold_ms,
+            "metrics_port": self.nt_metrics_port,
+            "redis_url": self.redis_url,
+            "redis_password": self.redis_password,
+            "symbols": self.symbols,
+        }

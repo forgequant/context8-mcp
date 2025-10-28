@@ -1,0 +1,68 @@
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+!README.md
+docs/
+.refs/
+specs/
+.specify/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+*.egg-info/
+dist/
+build/
+
+# Testing
+tests/
+*.test
+.coverage
+
+# Environment and secrets
+.env*
+*.key
+*.pem
+*.crt
+secrets/
+
+# Logs
+*.log
+*.log.*
+
+# IDEs and editors
+.vscode/
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+*.swo
+*~
+
+# Docker
+Dockerfile*
+.dockerignore
+docker-compose*.yml
+
+# Build artifacts
+bin/
+target/
+out/
+coverage/

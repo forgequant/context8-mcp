@@ -28,6 +28,10 @@ from nautilus_trader.trading.config import StrategyConfig
 
 from src.config import ProducerConfig
 from src.redis_publisher import RedisPublisher
+from src.redis_client import RedisClient
+from src.analytics_strategy import MarketAnalyticsStrategy, AnalyticsStrategyConfig
+from src.metrics.prometheus import PrometheusMetrics
+from src.instrument_loader import load_binance_spot_instruments
 
 # Configure structured logging per constitution principle 11
 structlog.configure(
@@ -107,17 +111,12 @@ class PublisherStrategy(Strategy):
         try:
             stream_id = self.redis_publisher.publish_trade_tick(tick)
             self.log.debug(
-                "trade_tick_published",
-                symbol=tick.instrument_id.symbol.value,
-                price=str(tick.price),
-                size=str(tick.size),
-                stream_id=stream_id,
+                f"trade_tick_published: symbol={tick.instrument_id.symbol.value}, "
+                f"price={str(tick.price)}, size={str(tick.size)}, stream_id={stream_id}"
             )
         except Exception as e:
             self.log.error(
-                "trade_tick_publish_failed",
-                symbol=tick.instrument_id.symbol.value,
-                error=str(e),
+                f"trade_tick_publish_failed: symbol={tick.instrument_id.symbol.value}, error={str(e)}"
             )
 
     def on_quote_tick(self, tick: QuoteTick) -> None:
@@ -125,17 +124,12 @@ class PublisherStrategy(Strategy):
         try:
             stream_id = self.redis_publisher.publish_quote_tick(tick)
             self.log.debug(
-                "quote_tick_published",
-                symbol=tick.instrument_id.symbol.value,
-                bid=str(tick.bid_price),
-                ask=str(tick.ask_price),
-                stream_id=stream_id,
+                f"quote_tick_published: symbol={tick.instrument_id.symbol.value}, "
+                f"bid={str(tick.bid_price)}, ask={str(tick.ask_price)}, stream_id={stream_id}"
             )
         except Exception as e:
             self.log.error(
-                "quote_tick_publish_failed",
-                symbol=tick.instrument_id.symbol.value,
-                error=str(e),
+                f"quote_tick_publish_failed: symbol={tick.instrument_id.symbol.value}, error={str(e)}"
             )
 
     def on_order_book_deltas(self, deltas: OrderBookDeltas) -> None:
@@ -143,16 +137,12 @@ class PublisherStrategy(Strategy):
         try:
             stream_id = self.redis_publisher.publish_order_book_deltas(deltas)
             self.log.debug(
-                "order_book_deltas_published",
-                symbol=deltas.instrument_id.symbol.value,
-                delta_count=len(deltas.deltas),
-                stream_id=stream_id,
+                f"order_book_deltas_published: symbol={deltas.instrument_id.symbol.value}, "
+                f"delta_count={len(deltas.deltas)}, stream_id={stream_id}"
             )
         except Exception as e:
             self.log.error(
-                "order_book_deltas_publish_failed",
-                symbol=deltas.instrument_id.symbol.value,
-                error=str(e),
+                f"order_book_deltas_publish_failed: symbol={deltas.instrument_id.symbol.value}, error={str(e)}"
             )
 
     def on_stop(self) -> None:
@@ -167,9 +157,7 @@ class PublisherStrategy(Strategy):
                 self.unsubscribe_order_book_deltas(instrument_id)
             except Exception as e:
                 self.log.error(
-                    "unsubscribe_failed",
-                    symbol=symbol_str,
-                    error=str(e),
+                    f"unsubscribe_failed: symbol={symbol_str}, error={str(e)}"
                 )
 
         self.log.info("publisher_strategy_stopped")
@@ -217,17 +205,18 @@ def main():
         ),
         data_clients={
             BINANCE: BinanceDataClientConfig(
-                api_key=None,  # Not needed for public data
-                api_secret=None,  # Not needed for public data
+                api_key=None,  # Public data only
+                api_secret=None,
                 account_type=BinanceAccountType.SPOT,
                 base_url_http=None,
                 base_url_ws=None,
                 us=False,
-                testnet=True,  # Use testnet mode to skip authenticated fee requests
+                testnet=False,
                 update_instruments_interval_mins=60,
                 use_agg_trade_ticks=False,  # Use raw trade ticks per constitution
                 instrument_provider=InstrumentProviderConfig(
-                    load_all=True,  # Load all instruments via public endpoints
+                    load_all=False,
+                    load_ids=frozenset(f"{symbol}.BINANCE" for symbol in config.symbols),
                 ),
             ),
         },
@@ -245,12 +234,57 @@ def main():
     strategy = PublisherStrategy(config=strategy_config)
     node.trader.add_strategy(strategy)
 
+    # Conditionally add analytics strategy if enabled
+    if config.nt_enable_kv_reports:
+        log.info(f"analytics_enabled: node={config.nt_node_id}, period_ms={config.nt_report_period_ms}, port={config.nt_metrics_port}")
+
+        # Initialize Prometheus metrics
+        metrics = PrometheusMetrics(port=config.nt_metrics_port)
+        metrics.set_node_heartbeat(config.nt_node_id, alive=True)
+        metrics.set_symbols_assigned(config.nt_node_id, len(config.symbols))
+
+        # Initialize Redis client for KV storage
+        analytics_redis_client = RedisClient(
+            url=config.redis_url,
+            password=config.redis_password if config.redis_password else None
+        )
+
+        # Add analytics strategy
+        analytics_config = AnalyticsStrategyConfig(
+            redis_client=analytics_redis_client.get_client(),
+            symbols=config.symbols,
+            node_id=config.nt_node_id,
+            report_period_ms=config.nt_report_period_ms,
+            metrics=metrics,
+        )
+        analytics_strategy = MarketAnalyticsStrategy(config=analytics_config)
+        node.trader.add_strategy(analytics_strategy)
+
+        log.info(f"Analytics strategy added for node {config.nt_node_id}")
+    else:
+        log.info("Analytics disabled (NT_ENABLE_KV_REPORTS=false)")
+
     # Register data client factory per reference example
     node.add_data_client_factory(BINANCE, BinanceLiveDataClientFactory)
 
     # Build the node
     log.info("building_trading_node")
     node.build()
+
+    # Load instruments from Binance public API (no auth required)
+    log.info(f"loading_instruments_from_public_api: {config.symbols}")
+    instruments = load_binance_spot_instruments(config.symbols)
+
+    if not instruments:
+        log.error("failed_to_load_instruments_cannot_continue")
+        sys.exit(1)
+
+    # Add instruments to cache
+    for instrument_id, instrument in instruments.items():
+        node.cache.add_instrument(instrument)
+        log.info(f"cached_instrument: {instrument_id}")
+
+    log.info(f"cached_{len(instruments)}_instruments_successfully")
 
     try:
         # Run the trading node (blocking)
