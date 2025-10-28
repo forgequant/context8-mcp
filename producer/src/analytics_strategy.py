@@ -214,8 +214,8 @@ class MarketAnalyticsStrategy(Strategy):
                             self.metrics.lease_conflicts.inc()
                         continue
 
-                # Generate report (use per-symbol token in US2 mode)
-                writer_token = self.writer_tokens.get(symbol, self.writer_token) if self.enable_coordination else self.writer_token
+                # Generate report (use per-symbol token in US2 mode, default token otherwise)
+                writer_token = self.writer_tokens.get(symbol, self.default_writer_token) if self.enable_coordination else self.default_writer_token
                 report = generate_fast_report(
                     state=state,
                     node_id=self.node_id,
