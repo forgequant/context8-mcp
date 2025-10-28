@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://context8/schemas/mcp.json",
+  "title": "MCP Tool Definition",
+  "description": "Model Context Protocol tool definition for context8 market analysis",
+  "type": "object",
+
+  "definitions": {
+    "Tool": {
+      "type": "object",
+      "required": ["name", "description", "inputSchema"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "const": "get_report",
+          "description": "Tool name"
+        },
+        "description": {
+          "type": "string",
+          "description": "Tool purpose and usage"
+        },
+        "inputSchema": {
+          "$ref": "#/definitions/InputSchema"
+        }
+      }
+    },
+
+    "InputSchema": {
+      "type": "object",
+      "required": ["type", "properties", "required"],
+      "properties": {
+        "type": {
+          "const": "object"
+        },
+        "properties": {
+          "type": "object",
+          "properties": {
+            "symbol": {
+              "type": "object",
+              "required": ["type", "description"],
+              "properties": {
+                "type": {
+                  "const": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "pattern": {
+                  "type": "string",
+                  "const": "^[A-Z]{3,10}USDT$"
+                }
+              }
+            }
+          }
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "const": "symbol"
+          },
+          "minItems": 1,
+          "maxItems": 1
+        }
+      }
+    },
+
+    "ToolResponse": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "$ref": "#/definitions/SuccessResponse" },
+              { "$ref": "#/definitions/ErrorResponse" }
+            ]
+          }
+        }
+      }
+    },
+
+    "SuccessResponse": {
+      "type": "object",
+      "required": ["type", "text"],
+      "properties": {
+        "type": {
+          "const": "text"
+        },
+        "text": {
+          "type": "string",
+          "description": "JSON-serialized MarketReport (see report.json schema)"
+        }
+      }
+    },
+
+    "ErrorResponse": {
+      "type": "object",
+      "required": ["type", "text"],
+      "properties": {
+        "type": {
+          "const": "text"
+        },
+        "text": {
+          "type": "string",
+          "description": "Error message (symbol_not_indexed or backend_unavailable)"
+        },
+        "isError": {
+          "const": true
+        }
+      }
+    }
+  },
+
+  "properties": {
+    "tool": {
+      "$ref": "#/definitions/Tool"
+    }
+  },
+
+  "examples": [
+    {
+      "tool": {
+        "name": "get_report",
+        "description": "Get comprehensive real-time market analysis report for a crypto trading pair. Returns current prices, spreads, order book depth (top 20 levels), liquidity features (walls, vacuums, volume profile), market flow metrics (orders per second, net buy/sell pressure), detected anomalies (spoofing, iceberg orders, flash crash risk), and an overall market health score (0-100). Data freshness is indicated by data_age_ms (target: ≤1000ms) and ingestion status (ok/degraded/down). Use this tool to answer questions about current market conditions, assess liquidity, identify manipulation patterns, or evaluate trade execution timing for BTCUSDT or ETHUSDT on Binance Spot.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "symbol": {
+              "type": "string",
+              "description": "Trading pair symbol (e.g., 'BTCUSDT', 'ETHUSDT'). Must be one of the symbols tracked by the system.",
+              "pattern": "^[A-Z]{3,10}USDT$"
+            }
+          },
+          "required": ["symbol"]
+        }
+      }
+    }
+  ],
+
+  "constraints": {
+    "timeout": {
+      "description": "MCP tool MUST respond within 150ms",
+      "value_ms": 150
+    },
+    "side_effects": {
+      "description": "Tool is read-only with no side effects",
+      "allowed": false
+    },
+    "data_source": {
+      "description": "Response MUST be sourced from cache only (no computation triggered)",
+      "cache_only": true
+    }
+  },
+
+  "error_codes": {
+    "symbol_not_indexed": {
+      "description": "Requested symbol has never been indexed or is not tracked",
+      "http_equivalent": 404,
+      "response_format": {
+        "type": "text",
+        "text": "{\"error\": \"symbol_not_indexed\", \"symbol\": \"<symbol>\", \"message\": \"Symbol <symbol> is not tracked. Available symbols: BTCUSDT, ETHUSDT\"}"
+      }
+    },
+    "backend_unavailable": {
+      "description": "Redis cache is unreachable or connection failed",
+      "http_equivalent": 503,
+      "response_format": {
+        "type": "text",
+        "text": "{\"error\": \"backend_unavailable\", \"message\": \"Unable to retrieve report due to backend service unavailability. Please try again later.\"}"
+      }
+    }
+  },
+
+  "usage_examples": [
+    {
+      "description": "Successful report retrieval",
+      "request": {
+        "name": "get_report",
+        "arguments": {
+          "symbol": "BTCUSDT"
+        }
+      },
+      "response": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"symbol\":\"BTCUSDT\",\"venue\":\"BINANCE\",\"generated_at\":\"2025-10-28T12:00:00Z\",\"data_age_ms\":87,\"report_version\":\"0.1.0\",\"ingestion\":{\"status\":\"ok\",\"fresh\":true},\"last_price\":64123.5,\"change_24h_pct\":1.23,\"high_24h\":65200.0,\"low_24h\":63000.0,\"volume_24h\":12345.67,\"best_bid\":{\"price\":64123.4,\"qty\":3.21},\"best_ask\":{\"price\":64123.6,\"qty\":2.98},\"spread_bps\":0.31,\"mid_price\":64123.5,\"micro_price\":64123.54,\"depth\":{\"top20_bid\":[{\"p\":64123.4,\"q\":3.21}],\"top20_ask\":[{\"p\":64123.6,\"q\":2.98}],\"sum_bid\":123.4,\"sum_ask\":110.7,\"imbalance\":0.054},\"flow\":{\"orders_per_sec\":128.0,\"net_flow\":-3.2},\"anomalies\":[],\"health\":{\"score\":82,\"components\":{\"spread\":18,\"depth\":22,\"balance\":14,\"flow\":13,\"anomalies\":0,\"freshness\":10}}}"
+          }
+        ]
+      }
+    },
+    {
+      "description": "Symbol not indexed error",
+      "request": {
+        "name": "get_report",
+        "arguments": {
+          "symbol": "XRPUSDT"
+        }
+      },
+      "response": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"error\": \"symbol_not_indexed\", \"symbol\": \"XRPUSDT\", \"message\": \"Symbol XRPUSDT is not tracked. Available symbols: BTCUSDT, ETHUSDT\"}",
+            "isError": true
+          }
+        ]
+      }
+    },
+    {
+      "description": "Backend unavailable error",
+      "request": {
+        "name": "get_report",
+        "arguments": {
+          "symbol": "BTCUSDT"
+        }
+      },
+      "response": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"error\": \"backend_unavailable\", \"message\": \"Unable to retrieve report due to backend service unavailability. Please try again later.\"}",
+            "isError": true
+          }
+        ]
+      }
+    }
+  ]
+}

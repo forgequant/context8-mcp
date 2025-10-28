@@ -1,0 +1,120 @@
+version: '3.9'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: context8-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - context8-network
+
+  producer:
+    build:
+      context: ./producer
+      dockerfile: Dockerfile
+    container_name: context8-producer
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: redis://redis:6379
+      STREAM_KEY: ${STREAM_KEY:-nt:binance}
+    healthcheck:
+      test: ["CMD", "python", "-c", "print('ok')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - context8-network
+
+  analytics:
+    build:
+      context: ./analytics
+      dockerfile: Dockerfile
+    container_name: context8-analytics
+    depends_on:
+      redis:
+        condition: service_healthy
+      producer:
+        condition: service_started
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: redis://redis:6379
+      CONSUMER_GROUP: ${CONSUMER_GROUP:-context8}
+      STREAM_KEY: ${STREAM_KEY:-nt:binance}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "analytics"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - context8-network
+
+  mcp:
+    build:
+      context: ./mcp
+      dockerfile: Dockerfile
+    container_name: context8-mcp
+    depends_on:
+      redis:
+        condition: service_healthy
+      analytics:
+        condition: service_started
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: redis://redis:6379
+      TIMEOUT_MS: ${TIMEOUT_MS:-150}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - context8-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: context8-prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - context8-network
+
+networks:
+  context8-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.8.0.0/16
+          gateway: 10.8.0.1

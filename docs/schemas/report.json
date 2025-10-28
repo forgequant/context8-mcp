@@ -1,0 +1,366 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://context8/schemas/report.json",
+  "title": "Market Report",
+  "description": "Comprehensive market analysis report schema",
+  "type": "object",
+  "required": [
+    "symbol",
+    "venue",
+    "generated_at",
+    "data_age_ms",
+    "report_version",
+    "ingestion",
+    "last_price",
+    "change_24h_pct",
+    "high_24h",
+    "low_24h",
+    "volume_24h",
+    "best_bid",
+    "best_ask",
+    "spread_bps",
+    "mid_price",
+    "micro_price",
+    "depth",
+    "flow",
+    "anomalies",
+    "health"
+  ],
+  "properties": {
+    "symbol": {
+      "type": "string",
+      "pattern": "^[A-Z]{3,10}USDT$",
+      "description": "Trading pair identifier"
+    },
+    "venue": {
+      "type": "string",
+      "const": "BINANCE",
+      "description": "Exchange identifier"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Report generation timestamp (UTC RFC3339)"
+    },
+    "data_age_ms": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Milliseconds since last data update"
+    },
+    "report_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version of report schema"
+    },
+    "ingestion": {
+      "$ref": "#/definitions/IngestionStatus"
+    },
+    "last_price": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Most recent trade price (0 if not yet available)"
+    },
+    "change_24h_pct": {
+      "type": "number",
+      "description": "24h price change percentage"
+    },
+    "high_24h": {
+      "type": "number",
+      "minimum": 0,
+      "description": "24h high price (0 if not yet available)"
+    },
+    "low_24h": {
+      "type": "number",
+      "minimum": 0,
+      "description": "24h low price (0 if not yet available)"
+    },
+    "volume_24h": {
+      "type": "number",
+      "minimum": 0,
+      "description": "24h trading volume"
+    },
+    "best_bid": {
+      "$ref": "#/definitions/PriceQty"
+    },
+    "best_ask": {
+      "$ref": "#/definitions/PriceQty"
+    },
+    "spread_bps": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Spread in basis points: (ask - bid) / bid * 10000"
+    },
+    "mid_price": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Mid price: (bid + ask) / 2"
+    },
+    "micro_price": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Volume-weighted mid price: (ask*bidQty + bid*askQty)/(bidQty+askQty)"
+    },
+    "depth": {
+      "$ref": "#/definitions/DepthMetrics"
+    },
+    "liquidity": {
+      "$ref": "#/definitions/LiquidityAnalysis",
+      "description": "Optional liquidity features (walls, vacuums, profile)"
+    },
+    "flow": {
+      "$ref": "#/definitions/FlowMetrics"
+    },
+    "anomalies": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Anomaly"
+      },
+      "description": "Detected market anomalies"
+    },
+    "health": {
+      "$ref": "#/definitions/HealthScore"
+    }
+  },
+
+  "definitions": {
+    "IngestionStatus": {
+      "type": "object",
+      "required": ["status", "fresh"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["ok", "degraded", "down"],
+          "description": "Data pipeline health status"
+        },
+        "fresh": {
+          "type": "boolean",
+          "description": "True if data_age_ms <= 1000"
+        }
+      }
+    },
+
+    "PriceQty": {
+      "type": "object",
+      "required": ["price", "qty"],
+      "properties": {
+        "price": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "qty": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+
+    "DepthMetrics": {
+      "type": "object",
+      "required": ["top20_bid", "top20_ask", "sum_bid", "sum_ask", "imbalance"],
+      "properties": {
+        "top20_bid": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/definitions/PriceQty"
+          },
+          "description": "Top 20 bid levels"
+        },
+        "top20_ask": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/definitions/PriceQty"
+          },
+          "description": "Top 20 ask levels"
+        },
+        "sum_bid": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Total bid quantity in top 20"
+        },
+        "sum_ask": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Total ask quantity in top 20"
+        },
+        "imbalance": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1,
+          "description": "Order book imbalance: (sum_bid - sum_ask)/(sum_bid + sum_ask)"
+        }
+      }
+    },
+
+
+    "LiquidityAnalysis": {
+      "type": "object",
+      "properties": {
+        "walls": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LiquidityWall"
+          },
+          "description": "Large concentrated orders"
+        },
+        "vacuums": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LiquidityVacuum"
+          },
+          "description": "Thin liquidity regions"
+        },
+        "profile": {
+          "$ref": "#/definitions/VolumeProfile",
+          "description": "Volume distribution profile"
+        }
+      }
+    },
+
+    "LiquidityWall": {
+      "type": "object",
+      "required": ["price", "qty"],
+      "properties": {
+        "price": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "qty": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "side": {
+          "type": "string",
+          "enum": ["bid", "ask"]
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["low", "medium", "high"]
+        }
+      }
+    },
+
+    "LiquidityVacuum": {
+      "type": "object",
+      "required": ["from", "to"],
+      "properties": {
+        "from": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Start price of thin region"
+        },
+        "to": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "End price of thin region"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["low", "medium", "high"]
+        }
+      }
+    },
+
+    "VolumeProfile": {
+      "type": "object",
+      "properties": {
+        "poc": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Point of Control (price with max volume)"
+        },
+        "vah": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Value Area High (upper 70% volume boundary)"
+        },
+        "val": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Value Area Low (lower 70% volume boundary)"
+        }
+      }
+    },
+
+    "FlowMetrics": {
+      "type": "object",
+      "required": ["orders_per_sec", "net_flow"],
+      "properties": {
+        "orders_per_sec": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Event processing rate (avg over last 10s)"
+        },
+        "net_flow": {
+          "type": "number",
+          "description": "Net buy/sell pressure (buy vol - sell vol over last 30s)"
+        }
+      }
+    },
+
+    "Anomaly": {
+      "type": "object",
+      "required": ["type", "severity"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["spoofing", "iceberg", "flash_crash_risk"],
+          "description": "Anomaly classification"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["low", "medium", "high"],
+          "description": "Impact level"
+        },
+        "note": {
+          "type": "string",
+          "description": "Optional human-readable description"
+        }
+      }
+    },
+
+    "HealthScore": {
+      "type": "object",
+      "required": ["score", "components"],
+      "properties": {
+        "score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Overall market quality score (0-100)"
+        },
+        "components": {
+          "type": "object",
+          "description": "Individual component contributions",
+          "properties": {
+            "spread": {
+              "type": "number",
+              "description": "Spread tightness contribution"
+            },
+            "depth": {
+              "type": "number",
+              "description": "Depth adequacy contribution"
+            },
+            "balance": {
+              "type": "number",
+              "description": "Order book balance contribution"
+            },
+            "flow": {
+              "type": "number",
+              "description": "Activity level contribution"
+            },
+            "anomalies": {
+              "type": "number",
+              "description": "Anomaly penalty"
+            },
+            "freshness": {
+              "type": "number",
+              "description": "Data freshness contribution"
+            }
+          }
+        }
+      }
+    }
+  }
+}

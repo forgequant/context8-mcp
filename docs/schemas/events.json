@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://context8/schemas/events.json",
+  "title": "Market Event Schemas",
+  "description": "JSON schemas for all market events published to Redis Streams (nt:binance)",
+
+  "definitions": {
+    "MarketEventEnvelope": {
+      "type": "object",
+      "required": ["type", "venue", "symbol", "ts_event", "payload"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["trade_tick", "order_book_depth", "order_book_deltas", "ticker_24h"],
+          "description": "Event type discriminator"
+        },
+        "venue": {
+          "type": "string",
+          "const": "BINANCE",
+          "description": "Exchange identifier (BINANCE for MVP)"
+        },
+        "symbol": {
+          "type": "string",
+          "pattern": "^[A-Z]{3,10}USDT$",
+          "description": "Trading pair (e.g., BTCUSDT, ETHUSDT)"
+        },
+        "ts_event": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Event timestamp from exchange in UTC RFC3339 format"
+        },
+        "payload": {
+          "description": "Type-specific event data",
+          "oneOf": [
+            { "$ref": "#/definitions/TradeTick" },
+            { "$ref": "#/definitions/OrderBookDepth" },
+            { "$ref": "#/definitions/OrderBookDeltas" },
+            { "$ref": "#/definitions/Ticker24h" }
+          ]
+        }
+      }
+    },
+
+    "TradeTick": {
+      "type": "object",
+      "required": ["price", "qty", "side", "trade_id"],
+      "properties": {
+        "price": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Trade execution price in quote currency"
+        },
+        "qty": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Trade quantity in base currency"
+        },
+        "side": {
+          "type": "string",
+          "enum": ["buy", "sell"],
+          "description": "Aggressor side (buyer or seller initiated)"
+        },
+        "trade_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique trade identifier from exchange"
+        }
+      }
+    },
+
+    "OrderBookDepth": {
+      "type": "object",
+      "required": ["bids", "asks", "levels"],
+      "properties": {
+        "bids": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/definitions/PriceQtyTuple"
+          },
+          "description": "Best bid levels (descending by price)"
+        },
+        "asks": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/definitions/PriceQtyTuple"
+          },
+          "description": "Best ask levels (ascending by price)"
+        },
+        "levels": {
+          "type": "integer",
+          "const": 20,
+          "description": "Number of levels in snapshot (20 for MVP)"
+        }
+      }
+    },
+
+    "OrderBookDeltas": {
+      "type": "object",
+      "required": ["bids_upd", "asks_upd"],
+      "properties": {
+        "bids_upd": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PriceQtyTuple"
+          },
+          "description": "Bid level updates (qty=0 means remove)"
+        },
+        "asks_upd": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PriceQtyTuple"
+          },
+          "description": "Ask level updates (qty=0 means remove)"
+        }
+      }
+    },
+
+    "Ticker24h": {
+      "type": "object",
+      "required": ["last_price", "price_change_pct", "high_24h", "low_24h", "volume_24h", "best_bid", "best_ask"],
+      "properties": {
+        "last_price": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Most recent trade price"
+        },
+        "price_change_pct": {
+          "type": "number",
+          "description": "24h price change percentage (can be negative)"
+        },
+        "high_24h": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Highest price in 24h window"
+        },
+        "low_24h": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Lowest price in 24h window"
+        },
+        "volume_24h": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Total traded volume in 24h"
+        },
+        "best_bid": {
+          "$ref": "#/definitions/PriceQtyTuple",
+          "description": "Top bid [price, qty]"
+        },
+        "best_ask": {
+          "$ref": "#/definitions/PriceQtyTuple",
+          "description": "Top ask [price, qty]"
+        }
+      }
+    },
+
+    "PriceQtyTuple": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": [
+        {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Price"
+        },
+        {
+          "type": "number",
+          "minimum": 0,
+          "description": "Quantity (0 for deletes)"
+        }
+      ]
+    }
+  },
+
+  "$ref": "#/definitions/MarketEventEnvelope"
+}

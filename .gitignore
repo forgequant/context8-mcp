@@ -5,3 +5,62 @@
 !.refs/INDEX.yaml
 !.refs/README.md
 !.refs/clone.sh
+
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+*.crt
+secrets/
+
+# Go
+*.exe
+*.test
+*.out
+bin/
+vendor/
+*.prof*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+ENV/
+env/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+*.log
+
+# Docker
+*.log*
+
+# IDEs and Editors
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.iml
+
+# Build artifacts
+analytics/bin/
+mcp/bin/
+producer/dist/
+
+# Temporary files
+tmp/
+temp/
