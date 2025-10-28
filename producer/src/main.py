@@ -249,18 +249,26 @@ def main():
             password=config.redis_password if config.redis_password else None
         )
 
-        # Add analytics strategy
+        # Add analytics strategy with US2 coordination parameters
         analytics_config = AnalyticsStrategyConfig(
             redis_client=analytics_redis_client.get_client(),
             symbols=config.symbols,
             node_id=config.nt_node_id,
             report_period_ms=config.nt_report_period_ms,
             metrics=metrics,
+            # US2: Multi-instance coordination
+            enable_coordination=config.nt_enable_multi_instance,
+            heartbeat_interval_sec=1.0,
+            rebalance_interval_sec=2.5,
+            lease_ttl_ms=config.nt_lease_ttl_ms,
+            min_hold_ms=config.nt_min_hold_ms,
+            hrw_sticky_pct=config.nt_hrw_sticky_pct,
         )
         analytics_strategy = MarketAnalyticsStrategy(config=analytics_config)
         node.trader.add_strategy(analytics_strategy)
 
-        log.info(f"Analytics strategy added for node {config.nt_node_id}")
+        coordination_status = "enabled" if config.nt_enable_multi_instance else "disabled"
+        log.info(f"Analytics strategy added for node {config.nt_node_id} (coordination={coordination_status})")
     else:
         log.info("Analytics disabled (NT_ENABLE_KV_REPORTS=false)")
 

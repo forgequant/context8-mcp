@@ -31,6 +31,8 @@ class ProducerConfig:
     nt_enable_streams: bool = True
     nt_report_period_ms: int = 250
     nt_slow_period_ms: int = 2000
+    # US2: Multi-instance coordination
+    nt_enable_multi_instance: bool = False
     nt_lease_ttl_ms: int = 2000
     nt_node_id: str = ""
     nt_hrw_sticky_pct: float = 0.02
@@ -61,6 +63,8 @@ class ProducerConfig:
             nt_enable_streams=os.getenv("NT_ENABLE_STREAMS", "true").lower() == "true",
             nt_report_period_ms=int(os.getenv("NT_REPORT_PERIOD_MS", "250")),
             nt_slow_period_ms=int(os.getenv("NT_SLOW_PERIOD_MS", "2000")),
+            # US2: Multi-instance coordination
+            nt_enable_multi_instance=os.getenv("NT_ENABLE_MULTI_INSTANCE", "false").lower() == "true",
             nt_lease_ttl_ms=int(os.getenv("NT_LEASE_TTL_MS", "2000")),
             nt_node_id=node_id,
             nt_hrw_sticky_pct=float(os.getenv("NT_HRW_STICKY_PCT", "0.02")),
@@ -109,6 +113,8 @@ class ProducerConfig:
             "node_id": self.nt_node_id,
             "report_period_ms": self.nt_report_period_ms,
             "slow_period_ms": self.nt_slow_period_ms,
+            # US2: Multi-instance coordination
+            "enable_multi_instance": self.nt_enable_multi_instance,
             "lease_ttl_ms": self.nt_lease_ttl_ms,
             "hrw_sticky_pct": self.nt_hrw_sticky_pct,
             "min_hold_ms": self.nt_min_hold_ms,

@@ -198,5 +198,25 @@ class LeaseManager:
             logger.error("get_token_error", symbol=symbol, error=str(e))
             return None
 
+    def get_lease_info(self, symbol: str) -> dict[str, any]:
+        """Get lease information (owner and token) for symbol.
+
+        Args:
+            symbol: Symbol to check
+
+        Returns:
+            Dictionary with 'owner' and 'token' keys, or empty dict if no lease
+        """
+        owner = self.get_current_owner(symbol)
+        token = self.get_current_token(symbol)
+
+        if owner is None and token is None:
+            return {}
+
+        return {
+            "owner": owner,
+            "token": token
+        }
+
     def __repr__(self) -> str:
         return f"LeaseManager(node_id={self.node_id})"
