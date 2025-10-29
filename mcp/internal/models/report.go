@@ -11,7 +11,7 @@ type MarketReport struct {
 	Venue         string    `json:"venue"`
 	GeneratedAt   time.Time `json:"generated_at"`
 	DataAgeMs     int64     `json:"data_age_ms"`
-	ReportVersion string    `json:"report_version"`
+	ReportVersion string    `json:"schemaVersion"`
 
 	// Ingestion Health
 	Ingestion IngestionStatus `json:"ingestion"`
