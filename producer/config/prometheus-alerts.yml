@@ -1,0 +1,237 @@
+# Prometheus Alert Rules for NautilusTrader Embedded Analytics
+# User Story 4: Operational Observability
+#
+# Usage:
+#   Add to Prometheus configuration:
+#   rule_files:
+#     - "producer/config/prometheus-alerts.yml"
+
+groups:
+  - name: market_data_quality
+    interval: 30s
+    rules:
+      # T078: Alert when market data becomes stale
+      - alert: MarketDataStale
+        expr: |
+          histogram_quantile(0.95,
+            rate(nt_data_age_ms_bucket[5m])
+          ) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: analytics
+        annotations:
+          summary: "Market data is stale (P95 age > 1000ms)"
+          description: |
+            The 95th percentile of data age for {{ $labels.symbol }} has been above 1000ms for 5+ minutes.
+            Current P95 age: {{ $value | humanizeDuration }}
+
+            This indicates the producer is falling behind on processing market data updates.
+
+            **Troubleshooting:**
+            - Check if the exchange WebSocket connection is healthy
+            - Verify network latency to the exchange
+            - Check producer CPU/memory usage
+            - Review logs for `order_book_deltas` or `trade_tick` processing errors
+
+      # T078: Critical alert for severely stale data
+      - alert: MarketDataCritical
+        expr: |
+          histogram_quantile(0.95,
+            rate(nt_data_age_ms_bucket[5m])
+          ) > 5000
+        for: 2m
+        labels:
+          severity: critical
+          component: analytics
+        annotations:
+          summary: "Market data is critically stale (P95 age > 5000ms)"
+          description: |
+            The 95th percentile of data age for {{ $labels.symbol }} has been above 5000ms for 2+ minutes.
+            Current P95 age: {{ $value | humanizeDuration }}
+
+            **IMMEDIATE ACTION REQUIRED**: Market data is severely delayed.
+
+  - name: coordination_health
+    interval: 30s
+    rules:
+      # T079: Alert on lease conflict spikes
+      - alert: LeaseConflictSpike
+        expr: |
+          rate(nt_lease_conflicts_total[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          component: coordination
+        annotations:
+          summary: "Lease conflicts detected ({{ $labels.symbol }})"
+          description: |
+            Symbol {{ $labels.symbol }} is experiencing lease conflicts at {{ $value | humanize }} conflicts/sec.
+
+            This indicates multiple producers attempting to write to the same symbol simultaneously,
+            which violates the single-writer invariant.
+
+            **Troubleshooting:**
+            - Check if clock skew exists between producer instances
+            - Verify Redis connectivity from all producers
+            - Review `lease_conflict` logs for fencing token mismatches
+            - Ensure NT_LEASE_TTL_MS is set correctly (default: 2000ms)
+
+      # T080: Alert on excessive rebalancing
+      - alert: ExcessiveRebalancing
+        expr: |
+          rate(nt_hrw_rebalances_total[10m]) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          component: coordination
+        annotations:
+          summary: "Excessive HRW rebalancing detected"
+          description: |
+            The cluster is rebalancing at {{ $value | humanize }} rebalances/sec for 10+ minutes.
+
+            Frequent rebalancing indicates unstable cluster membership, possibly due to:
+            - Producer instances flapping (starting/stopping repeatedly)
+            - Network connectivity issues causing heartbeat timeouts
+            - Resource constraints causing instances to become unresponsive
+
+            **Troubleshooting:**
+            - Check `nt_node_heartbeat` metric for all nodes
+            - Review producer logs for restart patterns
+            - Verify network stability between producers and Redis
+            - Consider increasing NT_MIN_HOLD_MS to reduce churn (default: 2000ms)
+
+  - name: producer_availability
+    interval: 30s
+    rules:
+      # T081: Alert when producer node goes down
+      - alert: ProducerDown
+        expr: |
+          nt_node_heartbeat == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: availability
+        annotations:
+          summary: "Producer node {{ $labels.node }} is down"
+          description: |
+            Producer node {{ $labels.node }} has not sent a heartbeat for 30+ seconds.
+
+            The node is considered down and its symbols will be reassigned to other nodes.
+
+            **Actions:**
+            - Check if the producer container/process is running
+            - Review producer logs for crash/exit reasons
+            - Verify Redis connectivity from the producer
+            - Check system resources (CPU, memory, disk)
+
+      # Alert when no producers are active
+      - alert: NoActiveProducers
+        expr: |
+          sum(nt_node_heartbeat) == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: availability
+        annotations:
+          summary: "No active producer nodes detected"
+          description: |
+            All producer nodes appear to be down. No market data is being published.
+
+            **IMMEDIATE ACTION REQUIRED**: Investigate producer infrastructure.
+
+  - name: performance_degradation
+    interval: 30s
+    rules:
+      # Alert on slow fast-cycle processing
+      - alert: FastCycleSlowProcessing
+        expr: |
+          histogram_quantile(0.95,
+            rate(nt_calc_latency_ms_bucket{cycle="fast"}[5m])
+          ) > 200
+        for: 5m
+        labels:
+          severity: warning
+          component: performance
+        annotations:
+          summary: "Fast cycle processing is slow (P95 > 200ms)"
+          description: |
+            The 95th percentile latency for fast-cycle calculations ({{ $labels.metric }})
+            has been above 200ms for 5+ minutes.
+            Current P95: {{ $value }}ms
+
+            Fast cycles should complete within ~20-50ms to maintain 250ms report cadence.
+
+            **Troubleshooting:**
+            - Check CPU usage on producer instances
+            - Review the number of symbols per producer (use `nt_symbols_assigned`)
+            - Consider scaling horizontally (add more producer instances)
+            - Check for slow Redis operations
+
+      # Alert on slow slow-cycle processing
+      - alert: SlowCycleSlowProcessing
+        expr: |
+          histogram_quantile(0.95,
+            rate(nt_calc_latency_ms_bucket{cycle="slow"}[5m])
+          ) > 1500
+        for: 5m
+        labels:
+          severity: warning
+          component: performance
+        annotations:
+          summary: "Slow cycle processing is slow (P95 > 1500ms)"
+          description: |
+            The 95th percentile latency for slow-cycle calculations ({{ $labels.metric }})
+            has been above 1500ms for 5+ minutes.
+            Current P95: {{ $value }}ms
+
+            Slow cycles target 2000ms cadence. P95 > 1500ms risks falling behind.
+
+            **Troubleshooting:**
+            - Check if volume profile calculations are hitting 30-min windows with many trades
+            - Review anomaly detection performance
+            - Consider reducing the number of symbols per producer
+
+  - name: data_ingestion_health
+    interval: 30s
+    rules:
+      # Alert when report publishing rate drops
+      - alert: LowReportPublishRate
+        expr: |
+          rate(nt_report_publish_total[5m]) < 2
+        for: 5m
+        labels:
+          severity: warning
+          component: ingestion
+        annotations:
+          summary: "Low report publish rate for {{ $labels.symbol }}"
+          description: |
+            Symbol {{ $labels.symbol }} is publishing reports at only {{ $value | humanize }} reports/sec.
+
+            Expected rate: ~4 Hz (250ms fast cycle cadence).
+
+            **Possible causes:**
+            - Symbol not assigned to any producer (check HRW assignment)
+            - Producer experiencing high latency
+            - Exchange data feed issues for this symbol
+            - Redis write failures
+
+      # Alert on WebSocket resubscription spikes
+      - alert: ExcessiveWebSocketResubscriptions
+        expr: |
+          rate(nt_ws_resubscribe_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: connectivity
+        annotations:
+          summary: "Frequent WebSocket resubscriptions detected"
+          description: |
+            WebSocket connections are reconnecting at {{ $value | humanize }} reconnects/sec.
+            Reason: {{ $labels.reason }}
+
+            **Troubleshooting:**
+            - Check network connectivity to exchange
+            - Review exchange API status
+            - Verify no rate limiting is occurring
+            - Check for producer restarts or crashes

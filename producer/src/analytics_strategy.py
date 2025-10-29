@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from src.state.symbol_state import SymbolState, TradeTick as StateTradeTick, PriceQty
 from src.reporters.fast_cycle import generate_fast_report
 from src.reporters.redis_cache import publish_report
+from src.reporters.slow_cycle import calculate_slow_metrics, enrich_report  # US3
 from src.metrics.prometheus import PrometheusMetrics
 from src.coordinator.membership import NodeMembership
 from src.coordinator.lease_manager import LeaseManager
@@ -32,6 +33,7 @@ class AnalyticsStrategyConfig(StrategyConfig, frozen=True):
     symbols: list[str] = []
     node_id: str = ""
     report_period_ms: int = 250
+    slow_period_ms: int = 2000  # US3: Slow-cycle period
     metrics: Any = None  # Injected PrometheusMetrics
     # US2: Coordination parameters
     enable_coordination: bool = False
@@ -60,6 +62,7 @@ class MarketAnalyticsStrategy(Strategy):
         self.symbols = config.symbols  # All symbols to potentially manage
         self.node_id = config.node_id
         self.report_period_ms = config.report_period_ms
+        self.slow_period_ms = config.slow_period_ms  # US3: Slow-cycle period
         self.metrics: PrometheusMetrics = config.metrics
 
         # US2: Coordination parameters
@@ -89,6 +92,16 @@ class MarketAnalyticsStrategy(Strategy):
         self._heartbeat_task = None
         self._rebalance_task = None
         self._lease_renewal_task = None
+
+        # US3: Slow-cycle state tracking
+        self._slow_cycle_running = False  # T074: Lag detection flag
+        self._slow_cycle_skip_count = 0
+
+        # T082: Structured logging with mandatory fields
+        self._structured_logger = structlog.get_logger().bind(
+            component="analytics_strategy",
+            node_id=self.node_id
+        )
 
         # Initialize coordination if enabled
         if self.enable_coordination:
@@ -159,11 +172,21 @@ class MarketAnalyticsStrategy(Strategy):
                 self._initialize_symbol(symbol_str)
                 self._subscribe_symbol(symbol_str)
 
+            # T086: Update health status with owned symbols in single-instance mode
+            self.metrics.update_health_status(owned_symbols=list(self.owned_symbols))
+
         # Setup fast-cycle timer (e.g., every 250ms)
         self.clock.set_timer(
             name="fast_cycle",
             interval=pd.Timedelta(milliseconds=self.report_period_ms),
             callback=self.on_fast_cycle,
+        )
+
+        # T072: Setup slow-cycle timer (US3: e.g., every 2000ms)
+        self.clock.set_timer(
+            name="slow_cycle",
+            interval=pd.Timedelta(milliseconds=self.slow_period_ms),
+            callback=self.on_slow_cycle,
         )
 
         # US2: Update metrics
@@ -173,6 +196,7 @@ class MarketAnalyticsStrategy(Strategy):
 
         self.log.info(
             f"Analytics strategy started: fast_cycle={self.report_period_ms}ms, "
+            f"slow_cycle={self.slow_period_ms}ms, "
             f"owned_symbols={len(self.owned_symbols)}, coordination={self.enable_coordination}"
         )
 
@@ -206,9 +230,12 @@ class MarketAnalyticsStrategy(Strategy):
                     # Verify token hasn't changed (stale writer detection)
                     lease_info = self.lease_manager.get_lease_info(symbol)
                     if lease_info and lease_info.get("token") != current_token:
-                        self.log.warning(
-                            f"report_skipped_stale_token: {symbol}, "
-                            f"our_token={current_token}, current_token={lease_info.get('token')}"
+                        # T083: Structured log for lease conflict
+                        self._structured_logger.bind(symbol=symbol).warning(
+                            "lease_conflict",
+                            our_token=current_token,
+                            current_token=lease_info.get('token'),
+                            reason="stale_token"
                         )
                         if self.metrics:
                             self.metrics.lease_conflicts.inc()
@@ -264,10 +291,15 @@ class MarketAnalyticsStrategy(Strategy):
                             cycle="fast"
                         ).observe(publish_time_ms)
 
-                    self.log.debug(
-                        f"report_published: {symbol}, data_age_ms={report['data_age_ms']}, "
-                        f"report_gen_ms={round(report_gen_time_ms, 2)}, "
-                        f"publish_ms={round(publish_time_ms, 2)}"
+                    # T082: Structured log for report publication with lag_ms
+                    self._structured_logger.bind(
+                        symbol=symbol,
+                        lag_ms=report['data_age_ms']
+                    ).debug(
+                        "report_published",
+                        report_gen_ms=round(report_gen_time_ms, 2),
+                        publish_ms=round(publish_time_ms, 2),
+                        writer_token=writer_token
                     )
                 else:
                     self.log.warning(
@@ -275,8 +307,12 @@ class MarketAnalyticsStrategy(Strategy):
                     )
 
             except Exception as e:
-                self.log.error(
-                    f"fast_cycle_error for {symbol}: {type(e).__name__} - {e}"
+                # T083: Structured log for calculation errors
+                self._structured_logger.bind(symbol=symbol).error(
+                    "calculation_error",
+                    error_type=type(e).__name__,
+                    error_message=str(e),
+                    phase="fast_cycle"
                 )
 
         # Record total cycle time
@@ -293,6 +329,105 @@ class MarketAnalyticsStrategy(Strategy):
             self.log.warning(
                 f"fast_cycle_slow: cycle_time_ms={round(cycle_time_ms, 2)}, "
                 f"period_ms={self.report_period_ms}, utilization_pct={utilization_pct}"
+            )
+
+    def on_slow_cycle(self, event) -> None:
+        """T073: Slow-cycle callback: calculate advanced analytics and enrich reports.
+
+        Called every slow_period_ms (default 2000ms).
+        Calculates volume profile, liquidity walls/vacuums, and anomaly detection.
+        """
+        # T074: Lag detection - skip if previous cycle still running
+        if self._slow_cycle_running:
+            self._slow_cycle_skip_count += 1
+            self.log.warning(
+                f"slow_cycle_skip: previous cycle still running, "
+                f"skip_count={self._slow_cycle_skip_count}"
+            )
+            return
+
+        self._slow_cycle_running = True
+        cycle_start = time.perf_counter()
+
+        try:
+            # Process each owned symbol
+            for symbol in list(self.owned_symbols):
+                if symbol not in self.symbol_states:
+                    continue
+
+                state = self.symbol_states[symbol]
+
+                try:
+                    # T073: Calculate slow-cycle metrics
+                    start_time = time.perf_counter()
+                    slow_metrics = calculate_slow_metrics(state, tick_size=0.01)
+                    calc_time_ms = (time.perf_counter() - start_time) * 1000
+
+                    # Record metrics for slow calculations (T075-T077)
+                    if self.metrics:
+                        # T075: Volume profile latency
+                        if slow_metrics.get("volume_profile"):
+                            self.metrics.calc_latency.labels(
+                                metric="volume_profile",
+                                cycle="slow"
+                            ).observe(calc_time_ms)
+
+                        # T076: Liquidity calculation latency
+                        if slow_metrics.get("liquidity_walls") or slow_metrics.get("liquidity_vacuums"):
+                            self.metrics.calc_latency.labels(
+                                metric="liquidity",
+                                cycle="slow"
+                            ).observe(calc_time_ms)
+
+                        # T077: Anomaly detection latency
+                        if slow_metrics.get("anomalies"):
+                            self.metrics.calc_latency.labels(
+                                metric="anomalies",
+                                cycle="slow"
+                            ).observe(calc_time_ms)
+
+                    # Fetch current (fast-cycle) report from Redis
+                    report_json = self.redis_client.get(f"report:{symbol}")
+
+                    if report_json:
+                        import json
+                        base_report = json.loads(report_json)
+
+                        # T071: Enrich report with slow-cycle data
+                        enriched_report = enrich_report(base_report, slow_metrics)
+
+                        # Publish enriched report
+                        publish_report(
+                            redis_client=self.redis_client,
+                            symbol=symbol,
+                            report=enriched_report
+                        )
+
+                        self._structured_logger.bind(symbol=symbol).debug(
+                            "slow_cycle_enriched",
+                            calc_time_ms=round(calc_time_ms, 2)
+                        )
+
+                except Exception as e:
+                    self._structured_logger.bind(symbol=symbol).error(
+                        "calculation_error",
+                        error_type=type(e).__name__,
+                        error_message=str(e),
+                        phase="slow_cycle"
+                    )
+
+        finally:
+            self._slow_cycle_running = False
+
+        # Record total cycle time
+        cycle_time_ms = (time.perf_counter() - cycle_start) * 1000
+
+        if cycle_time_ms > self.slow_period_ms * 0.8:
+            # Warn if cycle takes >80% of period
+            utilization_pct = round((cycle_time_ms / self.slow_period_ms) * 100, 1)
+            self.log.warning(
+                f"slow_cycle_slow: cycle_time_ms={round(cycle_time_ms, 2)}, "
+                f"period_ms={self.slow_period_ms}, utilization_pct={utilization_pct}"
             )
 
     def on_order_book_deltas(self, deltas: OrderBookDeltas) -> None:
@@ -320,17 +455,21 @@ class MarketAnalyticsStrategy(Strategy):
             best_bid_qty = order_book.best_bid_size()
             best_ask_qty = order_book.best_ask_size()
 
-            if best_bid_price and best_ask_price:
+            # Only construct PriceQty if both price and qty are positive
+            if best_bid_price and best_bid_qty and float(best_bid_qty) > 0:
                 state.best_bid = PriceQty(
                     price=float(best_bid_price),
-                    qty=float(best_bid_qty) if best_bid_qty else 0.0
-                )
-                state.best_ask = PriceQty(
-                    price=float(best_ask_price),
-                    qty=float(best_ask_qty) if best_ask_qty else 0.0
+                    qty=float(best_bid_qty)
                 )
 
-                # Update timestamp
+            if best_ask_price and best_ask_qty and float(best_ask_qty) > 0:
+                state.best_ask = PriceQty(
+                    price=float(best_ask_price),
+                    qty=float(best_ask_qty)
+                )
+
+            # Update timestamp if we got any order book data
+            if best_bid_price or best_ask_price:
                 state.last_event_ts = datetime.now(timezone.utc)
 
             # Extract full depth (up to 20 levels) from NautilusTrader order book
@@ -468,11 +607,14 @@ class MarketAnalyticsStrategy(Strategy):
                     if self.metrics:
                         self.metrics.node_heartbeat.labels(node=self.node_id).set(1)
 
-                    self.log.debug(f"heartbeat_sent: node={self.node_id}")
-
                     # Discover cluster members
                     active_nodes = self.membership.discover()
-                    self.log.debug(f"cluster_members: {len(active_nodes)} nodes active")
+
+                    # T082: Structured log for heartbeat
+                    self._structured_logger.debug(
+                        "heartbeat_sent",
+                        cluster_size=len(active_nodes)
+                    )
 
                 # Add jitter (±10%) to prevent thundering herd
                 jitter = random.uniform(-0.1, 0.1)
@@ -502,14 +644,31 @@ class MarketAnalyticsStrategy(Strategy):
                 symbols_to_acquire = rebalance_result.get("acquire", [])
                 symbols_to_release = rebalance_result.get("release", [])
 
+                # T083: Log rebalance trigger if changes detected
+                if symbols_to_acquire or symbols_to_release:
+                    self._structured_logger.info(
+                        "rebalance_triggered",
+                        symbols_to_acquire=len(symbols_to_acquire),
+                        symbols_to_release=len(symbols_to_release),
+                        total_owned=len(self.owned_symbols)
+                    )
+
                 # Release dropped symbols
                 for symbol in symbols_to_release:
-                    self.log.info(f"symbol_dropped_by_rebalance: {symbol}")
+                    # T082: Structured log for rebalance drop
+                    self._structured_logger.bind(symbol=symbol).info(
+                        "symbol_dropped_by_rebalance",
+                        reason="hrw_reassignment"
+                    )
                     await self._on_symbol_dropped_async(symbol)
 
                 # Acquire new symbols
                 for symbol in symbols_to_acquire:
-                    self.log.info(f"symbol_acquired_by_rebalance: {symbol}")
+                    # T082: Structured log for rebalance acquisition
+                    self._structured_logger.bind(symbol=symbol).info(
+                        "symbol_acquired_by_rebalance",
+                        reason="hrw_reassignment"
+                    )
                     await self._on_symbol_acquired_async(symbol)
 
                 # Update metrics
@@ -547,11 +706,18 @@ class MarketAnalyticsStrategy(Strategy):
                     try:
                         renewed = self.lease_manager.renew(symbol, self.lease_ttl_ms)
 
-                        if not renewed:
+                        if renewed:
+                            # T083: Log successful lease renewal
+                            self._structured_logger.bind(symbol=symbol).debug(
+                                "lease_renewed",
+                                ttl_ms=self.lease_ttl_ms
+                            )
+                        else:
                             # Lost lease ownership - mark for dropping
-                            self.log.warning(
-                                f"lease_lost: {symbol}, node_id={self.node_id}, "
-                                f"marking for release"
+                            # T082: Structured log for lease loss
+                            self._structured_logger.bind(symbol=symbol).warning(
+                                "lease_lost",
+                                reason="renewal_failed"
                             )
                             symbols_to_drop.append(symbol)
 
@@ -609,8 +775,14 @@ class MarketAnalyticsStrategy(Strategy):
             # Mark as owned
             self.owned_symbols.add(symbol)
 
-            self.log.info(
-                f"symbol_acquired: {symbol}, owned_symbols={len(self.owned_symbols)}"
+            # T086: Update health status with owned symbols
+            self.metrics.update_health_status(owned_symbols=list(self.owned_symbols))
+
+            # T082: Structured log for symbol acquisition
+            self._structured_logger.bind(symbol=symbol).info(
+                "symbol_acquired",
+                owned_symbols=len(self.owned_symbols),
+                writer_token=token
             )
 
         except Exception as e:
@@ -644,12 +816,17 @@ class MarketAnalyticsStrategy(Strategy):
             # Remove from owned
             self.owned_symbols.discard(symbol)
 
+            # T086: Update health status with owned symbols
+            self.metrics.update_health_status(owned_symbols=list(self.owned_symbols))
+
             # Cleanup state (keep for potential re-acquisition)
             # Don't delete state immediately - allow reuse if symbol comes back
             # self.symbol_states.pop(symbol, None)
 
-            self.log.info(
-                f"symbol_dropped: {symbol}, owned_symbols={len(self.owned_symbols)}"
+            # T082: Structured log for symbol drop
+            self._structured_logger.bind(symbol=symbol).info(
+                "symbol_dropped",
+                owned_symbols=len(self.owned_symbols)
             )
 
         except Exception as e:
@@ -737,7 +914,11 @@ class MarketAnalyticsStrategy(Strategy):
                     try:
                         released = self.lease_manager.release(symbol)
                         if released:
-                            self.log.info(f"lease_released_on_shutdown: {symbol}")
+                            # T082: Structured log for lease release on shutdown
+                            self._structured_logger.bind(symbol=symbol).info(
+                                "lease_released",
+                                reason="shutdown"
+                            )
                     except Exception as e:
                         self.log.error(f"lease_release_error: {symbol}, {e}")
 

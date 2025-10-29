@@ -1,20 +1,91 @@
 """Prometheus metrics for embedded analytics."""
-from prometheus_client import Counter, Gauge, Histogram, start_http_server
+from prometheus_client import Counter, Gauge, Histogram, make_wsgi_app
+from wsgiref.simple_server import make_server, WSGIRequestHandler
+import json
+import time
+import threading
 import structlog
 
 logger = structlog.get_logger()
 
 
+class HealthStatus:
+    """Health status information for the node."""
+
+    def __init__(self, node_id: str):
+        self.node_id = node_id
+        self.start_time = time.time()
+        self.owned_symbols: list[str] = []
+        self.configured_symbols: list[str] = []
+        self.coordination_enabled: bool = False
+        self.is_healthy: bool = True
+
+    def to_dict(self) -> dict:
+        """Convert health status to dictionary."""
+        uptime_sec = time.time() - self.start_time
+        return {
+            "status": "healthy" if self.is_healthy else "unhealthy",
+            "node_id": self.node_id,
+            "uptime_seconds": round(uptime_sec, 2),
+            "coordination": {
+                "enabled": self.coordination_enabled,
+                "owned_symbols": self.owned_symbols,
+                "configured_symbols": self.configured_symbols,
+            }
+        }
+
+
+class HealthCheckHandler(WSGIRequestHandler):
+    """Custom WSGI request handler that logs less verbosely."""
+
+    def log_message(self, format, *args):
+        """Suppress default logging (we use structlog)."""
+        pass
+
+
+def create_wsgi_app(health_status: HealthStatus):
+    """Create WSGI app that serves both /metrics and /health endpoints."""
+    metrics_app = make_wsgi_app()
+
+    def app(environ, start_response):
+        path = environ.get('PATH_INFO', '/')
+
+        if path == '/health':
+            # Serve health endpoint
+            status = '200 OK' if health_status.is_healthy else '503 Service Unavailable'
+            headers = [('Content-Type', 'application/json')]
+            start_response(status, headers)
+            return [json.dumps(health_status.to_dict()).encode('utf-8')]
+
+        elif path == '/metrics' or path == '/':
+            # Serve Prometheus metrics
+            return metrics_app(environ, start_response)
+
+        else:
+            # 404 for unknown paths
+            status = '404 Not Found'
+            headers = [('Content-Type', 'text/plain')]
+            start_response(status, headers)
+            return [b'Not Found']
+
+    return app
+
+
 class PrometheusMetrics:
     """Prometheus metrics for NautilusTrader embedded analytics."""
 
-    def __init__(self, port: int = 9101):
+    def __init__(self, port: int = 9101, node_id: str = ""):
         """Initialize Prometheus metrics and start HTTP server.
 
         Args:
             port: Port for metrics HTTP server
+            node_id: Node identifier for health status
         """
         self.port = port
+        self.node_id = node_id
+
+        # T086: Initialize health status
+        self.health_status = HealthStatus(node_id=node_id)
 
         # Node health metrics
         self.node_heartbeat = Gauge(
@@ -68,13 +139,19 @@ class PrometheusMetrics:
             ['reason']
         )
 
-        # Start HTTP server for /metrics endpoint
+        # T086: Start HTTP server for /metrics and /health endpoints
         try:
-            start_http_server(port)
-            logger.info("prometheus_metrics_server_started", port=port)
+            wsgi_app = create_wsgi_app(self.health_status)
+            httpd = make_server('', port, wsgi_app, handler_class=HealthCheckHandler)
+
+            # Run server in background thread
+            server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+            server_thread.start()
+
+            logger.info("http_server_started", port=port, endpoints=["/metrics", "/health"])
         except OSError as e:
             if "Address already in use" in str(e):
-                logger.warning("prometheus_port_already_in_use", port=port)
+                logger.warning("http_port_already_in_use", port=port)
             else:
                 raise
 
@@ -131,6 +208,57 @@ class PrometheusMetrics:
             reason: Reason for resubscription (e.g., "disconnect", "symbol_acquired")
         """
         self.ws_resubscribe.labels(reason=reason).inc()
+
+    def update_health_status(
+        self,
+        owned_symbols: list[str] | None = None,
+        configured_symbols: list[str] | None = None,
+        coordination_enabled: bool | None = None,
+        is_healthy: bool | None = None
+    ) -> None:
+        """Update health status information.
+
+        Args:
+            owned_symbols: List of symbols currently owned by this node
+            configured_symbols: List of all configured symbols
+            coordination_enabled: Whether multi-instance coordination is enabled
+            is_healthy: Health status (True=healthy, False=unhealthy)
+        """
+        if owned_symbols is not None:
+            self.health_status.owned_symbols = owned_symbols
+        if configured_symbols is not None:
+            self.health_status.configured_symbols = configured_symbols
+        if coordination_enabled is not None:
+            self.health_status.coordination_enabled = coordination_enabled
+        if is_healthy is not None:
+            self.health_status.is_healthy = is_healthy
+
+    def validate_metrics(self) -> tuple[bool, list[str]]:
+        """T085: Validate that all expected metrics are registered.
+
+        Returns:
+            Tuple of (all_present, missing_metrics)
+        """
+        # Map metric names to actual attribute names
+        metric_to_attr = {
+            'nt_node_heartbeat': 'node_heartbeat',
+            'nt_symbols_assigned': 'symbols_assigned',
+            'nt_calc_latency_ms': 'calc_latency',
+            'nt_report_publish_total': 'report_publish_rate',
+            'nt_data_age_ms': 'data_age',
+            'nt_lease_conflicts_total': 'lease_conflicts',
+            'nt_hrw_rebalances_total': 'hrw_rebalances',
+            'nt_ws_resubscribe_total': 'ws_resubscribe',
+        }
+
+        missing = []
+        for metric_name, attr_name in metric_to_attr.items():
+            if not hasattr(self, attr_name):
+                missing.append(metric_name)
+                logger.warning("metric_not_found", metric=metric_name, expected_attr=attr_name)
+
+        all_present = len(missing) == 0
+        return all_present, missing
 
     def __repr__(self) -> str:
         return f"PrometheusMetrics(port={self.port})"

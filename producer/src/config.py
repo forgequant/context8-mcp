@@ -58,7 +58,8 @@ class ProducerConfig:
             redis_password=os.getenv("REDIS_PASSWORD", ""),
             stream_key=os.getenv("STREAM_KEY", "nt:binance"),
             symbols=symbols,
-            log_level=os.getenv("LOG_LEVEL", "info").lower(),
+            # T084: Support NT_LOG_LEVEL with fallback to LOG_LEVEL
+            log_level=os.getenv("NT_LOG_LEVEL", os.getenv("LOG_LEVEL", "info")).lower(),
             nt_enable_kv_reports=os.getenv("NT_ENABLE_KV_REPORTS", "false").lower() == "true",
             nt_enable_streams=os.getenv("NT_ENABLE_STREAMS", "true").lower() == "true",
             nt_report_period_ms=int(os.getenv("NT_REPORT_PERIOD_MS", "250")),

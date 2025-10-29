@@ -33,18 +33,50 @@ from src.analytics_strategy import MarketAnalyticsStrategy, AnalyticsStrategyCon
 from src.metrics.prometheus import PrometheusMetrics
 from src.instrument_loader import load_binance_spot_instruments
 
-# Configure structured logging per constitution principle 11
-structlog.configure(
-    processors=[
-        structlog.stdlib.add_log_level,
-        structlog.stdlib.add_logger_name,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.JSONRenderer(),
-    ],
-    wrapper_class=structlog.stdlib.BoundLogger,
-    logger_factory=structlog.stdlib.LoggerFactory(),
-    cache_logger_on_first_use=True,
-)
+# T084: Configure structured logging with log level support
+# Will be properly configured after loading config
+def configure_structlog(log_level: str = "info"):
+    """Configure structlog with proper log level filtering."""
+    import logging
+
+    # Map string log level to logging constant
+    level_map = {
+        "debug": logging.DEBUG,
+        "info": logging.INFO,
+        "warn": logging.WARNING,
+        "warning": logging.WARNING,
+        "error": logging.ERROR,
+    }
+
+    logging_level = level_map.get(log_level.lower(), logging.INFO)
+
+    # Configure root logger level
+    # Note: basicConfig is a no-op on subsequent calls, so explicitly set level
+    logging.basicConfig(
+        format="%(message)s",
+        level=logging_level,
+    )
+
+    # Explicitly set root logger level to handle reconfiguration
+    # This ensures NT_LOG_LEVEL is honored even after initial configuration
+    logging.getLogger().setLevel(logging_level)
+
+    structlog.configure(
+        processors=[
+            structlog.stdlib.filter_by_level,  # T084: Filter by log level
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.add_logger_name,
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.JSONRenderer(),
+        ],
+        wrapper_class=structlog.stdlib.BoundLogger,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
+        context_class=dict,
+    )
+
+# Initial configuration (will be reconfigured with proper level after config load)
+configure_structlog("info")
 
 log = structlog.get_logger()
 
@@ -167,6 +199,19 @@ def main():
     """Main entry point for producer service."""
     log.info("producer_starting")
 
+    # T057: Setup signal handlers for graceful shutdown (SIGTERM, SIGINT)
+    shutdown_event = asyncio.Event()
+
+    def handle_shutdown_signal(signum, frame):
+        """Handle SIGTERM/SIGINT for graceful shutdown."""
+        sig_name = signal.Signals(signum).name
+        log.info(f"shutdown_signal_received: {sig_name}")
+        shutdown_event.set()
+
+    signal.signal(signal.SIGTERM, handle_shutdown_signal)
+    signal.signal(signal.SIGINT, handle_shutdown_signal)
+    log.info("signal_handlers_registered: SIGTERM, SIGINT")
+
     # Load configuration
     config = ProducerConfig.from_env()
     try:
@@ -174,6 +219,9 @@ def main():
     except ValueError as e:
         log.error("configuration_invalid", error=str(e))
         sys.exit(1)
+
+    # T084: Reconfigure logging with proper level from config
+    configure_structlog(config.log_level)
 
     log.info(
         "configuration_loaded",
@@ -238,10 +286,22 @@ def main():
     if config.nt_enable_kv_reports:
         log.info(f"analytics_enabled: node={config.nt_node_id}, period_ms={config.nt_report_period_ms}, port={config.nt_metrics_port}")
 
-        # Initialize Prometheus metrics
-        metrics = PrometheusMetrics(port=config.nt_metrics_port)
+        # Initialize Prometheus metrics with node_id for health endpoint
+        metrics = PrometheusMetrics(port=config.nt_metrics_port, node_id=config.nt_node_id)
         metrics.set_node_heartbeat(config.nt_node_id, alive=True)
         metrics.set_symbols_assigned(config.nt_node_id, len(config.symbols))
+
+        # T085: Validate metrics registration
+        all_present, missing = metrics.validate_metrics()
+        if not all_present:
+            log.warning("metrics_validation_warning", missing_metrics=missing)
+
+        # T086: Initialize health status with configuration
+        metrics.update_health_status(
+            configured_symbols=config.symbols,
+            coordination_enabled=config.nt_enable_multi_instance,
+            is_healthy=True
+        )
 
         # Initialize Redis client for KV storage
         analytics_redis_client = RedisClient(
@@ -255,6 +315,7 @@ def main():
             symbols=config.symbols,
             node_id=config.nt_node_id,
             report_period_ms=config.nt_report_period_ms,
+            slow_period_ms=config.nt_slow_period_ms,  # US3: Slow-cycle period
             metrics=metrics,
             # US2: Multi-instance coordination
             enable_coordination=config.nt_enable_multi_instance,
