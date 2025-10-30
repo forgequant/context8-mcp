@@ -1,0 +1,23 @@
+# Docker Compose Override for Local Development
+#
+# This file is automatically merged with docker-compose.yml when running docker-compose commands.
+# It adds local port mappings for development without requiring domain names.
+#
+# Purpose:
+# - Production deployment uses Traefik with HTTPS and domain names (docker-compose.yml)
+# - Local development exposes ports directly for easier access (this file)
+#
+# Usage:
+# - docker compose up      → Uses both docker-compose.yml + compose.override.yml (with ports)
+# - To test production setup locally: docker compose -f docker-compose.yml up
+#
+# To disable this override:
+# - Rename to compose.override.yml.disabled
+# - Or use: docker compose -f docker-compose.yml up
+
+name: context8-mcp
+
+services:
+  mcp:
+    ports:
+      - "8080:8080"

@@ -1,0 +1,26 @@
+# Use Python 3.11 slim image
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install dependencies directly
+RUN pip install --no-cache-dir \
+    "mcp>=1.7.1" \
+    "redis>=5.0.0" \
+    "starlette>=0.27.0" \
+    "uvicorn>=0.27.0"
+
+# Copy source code
+COPY sse_server.py ./
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV REDIS_URL=redis://redis:6379
+ENV PORT=8080
+
+# Expose port
+EXPOSE 8080
+
+# Run the SSE MCP server
+CMD ["python", "sse_server.py"]

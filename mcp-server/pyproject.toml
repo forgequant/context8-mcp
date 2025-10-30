@@ -1,0 +1,28 @@
+[project]
+name = "context8-mcp-server"
+version = "0.1.0"
+description = "MCP Server for Context8 market data"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.7.1",
+    "redis>=5.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "ruff>=0.1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

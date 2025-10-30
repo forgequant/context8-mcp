@@ -27,6 +27,7 @@ git clone https://github.com/ppatierno/kafka-go-examples.git
 git clone https://github.com/modelcontextprotocol/go-sdk.git
 git clone https://github.com/modelcontextprotocol/servers.git
 git clone https://github.com/mark3labs/mcp-go.git
+git clone https://github.com/jlowin/fastmcp.git
 
 # Микроструктура / расчёты (референсы)
 git clone https://github.com/sstoikov/microprice.git

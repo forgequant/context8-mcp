@@ -1,9 +1,55 @@
+name: context8-mcp
+
 services:
+  # Traefik Reverse Proxy with Let's Encrypt
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    command:
+      # Enable API and dashboard
+      - "--api.dashboard=true"
+      - "--api.insecure=false"
+      # Docker provider
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=mcp-network"
+      # Entrypoints
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # HTTP to HTTPS redirect
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      # Let's Encrypt configuration
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@context8.markets}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      # Logs
+      - "--log.level=${TRAEFIK_LOG_LEVEL:-INFO}"
+      - "--accesslog=true"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-certs:/letsencrypt
+    networks:
+      - mcp-network
+    restart: unless-stopped
+    labels:
+      # Traefik dashboard
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.context8.markets`)"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
+      - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik.service=api@internal"
+      # Traefik dashboard auth (set TRAEFIK_BASIC_AUTH in .env)
+      - "traefik.http.routers.traefik.middlewares=traefik-auth"
+      - "traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_BASIC_AUTH}"
+
   redis:
     image: redis:7-alpine
     container_name: context8-redis
-    ports:
-      - "6379:6379"
     command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -11,7 +57,7 @@ services:
       timeout: 3s
       retries: 5
     networks:
-      - context8-network
+      - mcp-network
 
   producer:
     build:
@@ -46,32 +92,71 @@ services:
       retries: 3
       start_period: 15s
     networks:
-      - context8-network
+      - mcp-network
 
+  # MCP Server (stdio transport - for local use with Claude Desktop)
+  # This service is not meant to run as a daemon in Docker.
+  # To use: `docker compose run --rm mcp`
   mcp:
     build:
-      context: ./mcp
+      context: ./mcp-server
       dockerfile: Dockerfile
     container_name: context8-mcp
     depends_on:
       redis:
         condition: service_healthy
-    ports:
-      - "8080:8080"
+    profiles:
+      - tools  # Only start when explicitly requested
     env_file:
       - .env
     environment:
       REDIS_URL: redis://redis:6379
-      TIMEOUT_MS: ${TIMEOUT_MS:-150}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
+    networks:
+      - mcp-network
+    stdin_open: true
+    tty: true
+
+  # MCP SSE Server (HTTP/SSE transport - for ChatGPT integration)
+  mcp-sse:
+    build:
+      context: ./mcp-server
+      dockerfile: Dockerfile.sse
+    container_name: context8-mcp-sse
+    depends_on:
+      redis:
+        condition: service_healthy
+      traefik:
+        condition: service_started
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: redis://redis:6379
+      PORT: 8080
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:8080/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 10s
     networks:
-      - context8-network
+      - mcp-network
+    labels:
+      # Enable Traefik
+      - "traefik.enable=true"
+      # HTTP Router
+      - "traefik.http.routers.mcp-sse.rule=Host(`api.context8.markets`)"
+      - "traefik.http.routers.mcp-sse.entrypoints=websecure"
+      - "traefik.http.routers.mcp-sse.tls.certresolver=letsencrypt"
+      # Service
+      - "traefik.http.services.mcp-sse.loadbalancer.server.port=8080"
+      # CORS middleware
+      - "traefik.http.routers.mcp-sse.middlewares=mcp-sse-cors"
+      - "traefik.http.middlewares.mcp-sse-cors.headers.accesscontrolallowmethods=GET,POST,OPTIONS"
+      - "traefik.http.middlewares.mcp-sse-cors.headers.accesscontrolalloworiginlist=*"
+      - "traefik.http.middlewares.mcp-sse-cors.headers.accesscontrolallowheaders=*"
+      - "traefik.http.middlewares.mcp-sse-cors.headers.accesscontrolmaxage=100"
+      - "traefik.http.middlewares.mcp-sse-cors.headers.addvaryheader=true"
 
   #prometheus:
   #  image: prom/prometheus:latest
@@ -93,11 +178,16 @@ services:
   #  networks:
   #    - context8-network
 
+volumes:
+  # Let's Encrypt certificates storage
+  traefik-certs:
+    driver: local
+
 networks:
-  context8-network:
+  mcp-network:
     driver: bridge
     ipam:
       driver: default
       config:
-        - subnet: 10.8.0.0/16
-          gateway: 10.8.0.1
+        - subnet: 172.88.0.0/16
+          gateway: 172.88.0.1
