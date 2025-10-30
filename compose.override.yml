@@ -21,3 +21,7 @@ services:
   mcp:
     ports:
       - "8080:8080"
+
+  mcp-sse:
+    ports:
+      - "8081:8080"  # Expose SSE server on host port 8081

@@ -216,11 +216,20 @@ class Context8MCPServer:
         Handle SSE request with JSON-RPC over SSE.
         Compatible with ChatGPT MCP integration.
         """
+        # Parse JSON-RPC request BEFORE creating the streaming response
+        try:
+            body = await request.json()
+            logger.info(f"SSE request: {body}")
+        except Exception as e:
+            logger.error(f"Failed to parse request body: {e}")
+            from starlette.responses import JSONResponse
+            return JSONResponse(
+                {"jsonrpc": "2.0", "error": {"code": -32700, "message": "Parse error"}},
+                status_code=400
+            )
+
         async def event_stream():
             try:
-                # Parse JSON-RPC request
-                body = await request.json()
-                logger.info(f"SSE request: {body}")
 
                 method = body.get("method")
                 params = body.get("params", {})
