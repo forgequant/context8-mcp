@@ -67,20 +67,32 @@ func main() {
 	// Create handlers
 	getReportHandler := handlers.NewGetReportHandler(cacheReader, logger)
 
+	// Create MCP invoke handler for ChatGPT integration (User Story 1)
+	mcpInvokeHandler, err := handlers.NewMCPInvokeHandler(cacheReader, logger)
+	if err != nil {
+		logger.Error("failed to create MCP invoke handler", "error", err)
+		os.Exit(1)
+	}
+
 	// Create router
 	r := chi.NewRouter()
 
 	// Add middleware per constitution principle 13 (MCP Contract)
 	r.Use(middleware.Recoverer)
+	r.Use(handlers.CorrelationIDMiddleware()) // Add correlation ID for tracing
 	r.Use(handlers.LoggingMiddleware(logger))
 	r.Use(handlers.TimeoutMiddleware(cfg.Timeout(), logger))
 
 	// Health check endpoint (for docker healthcheck)
 	r.Get("/health", handlers.HealthCheckHandler(logger))
 
-	// MCP endpoint per constitution principle 13
+	// Legacy MCP endpoint per constitution principle 13
 	// GET /get_report?symbol=BTCUSDT
 	r.Get("/get_report", getReportHandler.ServeHTTP)
+
+	// MCP Protocol endpoints for ChatGPT integration
+	// POST /mcp/sse - Call tool via JSON-RPC + SSE
+	r.Post("/mcp/sse", mcpInvokeHandler.ServeHTTP)
 
 	// Start HTTP server
 	srv := &http.Server{
