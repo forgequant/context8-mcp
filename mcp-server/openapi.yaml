@@ -1,0 +1,147 @@
+openapi: 3.0.0
+info:
+  title: Context8 Market Data API
+  version: 1.0.0
+  description: Real-time cryptocurrency market data and analytics
+
+servers:
+  - url: https://api.context8.markets
+    description: Production server
+
+paths:
+  /api/report:
+    get:
+      operationId: getMarketReport
+      summary: Get real-time market report for a symbol
+      description: Returns comprehensive market data including price, orderbook, liquidity, flow, and health metrics
+      parameters:
+        - name: symbol
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]+USDT$'
+            example: BTCUSDT
+          description: Trading pair symbol (e.g., BTCUSDT, ETHUSDT)
+      responses:
+        '200':
+          description: Market report retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketReport'
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Symbol not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/symbols:
+    get:
+      operationId: listSymbols
+      summary: List all available symbols
+      description: Returns a list of all tracked trading symbols
+      responses:
+        '200':
+          description: List of symbols
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  symbols:
+                    type: array
+                    items:
+                      type: string
+                    example: ["BTCUSDT", "ETHUSDT", "BNBUSDT"]
+                  count:
+                    type: integer
+                    example: 3
+
+components:
+  schemas:
+    MarketReport:
+      type: object
+      properties:
+        schemaVersion:
+          type: string
+          example: "1.1"
+        symbol:
+          type: string
+          example: "BTCUSDT"
+        venue:
+          type: string
+          example: "BINANCE"
+        generated_at:
+          type: string
+          format: date-time
+        last_price:
+          type: number
+          example: 107319.7
+        change_24h_pct:
+          type: number
+          example: 0.0
+        high_24h:
+          type: number
+          example: 107319.7
+        low_24h:
+          type: number
+          example: 107319.7
+        volume_24h:
+          type: number
+          example: 0.0
+        best_bid:
+          type: object
+          properties:
+            price:
+              type: number
+            qty:
+              type: number
+        best_ask:
+          type: object
+          properties:
+            price:
+              type: number
+            qty:
+              type: number
+        spread_bps:
+          type: number
+          description: Spread in basis points
+        mid_price:
+          type: number
+        micro_price:
+          type: number
+        depth:
+          type: object
+          description: Order book depth analysis
+        flow:
+          type: object
+          description: Order flow metrics
+          properties:
+            orders_per_sec:
+              type: number
+            net_flow:
+              type: number
+        health:
+          type: object
+          description: Market health score
+          properties:
+            score:
+              type: integer
+              minimum: 0
+              maximum: 100
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        error_code:
+          type: string

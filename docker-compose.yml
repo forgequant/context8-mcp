@@ -116,12 +116,12 @@ services:
     stdin_open: true
     tty: true
 
-  # MCP SSE Server (HTTP/SSE transport - for ChatGPT integration)
+  # REST API Server (for ChatGPT Custom Actions)
   mcp-sse:
     build:
       context: ./mcp-server
-      dockerfile: Dockerfile.sse
-    container_name: context8-mcp-sse
+      dockerfile: Dockerfile.rest
+    container_name: context8-rest-api
     depends_on:
       redis:
         condition: service_healthy

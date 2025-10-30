@@ -1,0 +1,16 @@
+# REST API server for ChatGPT Custom Actions
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+RUN pip install --no-cache-dir \
+    "redis>=5.0.0" \
+    "starlette>=0.27.0" \
+    "uvicorn>=0.27.0"
+
+# Copy server file
+COPY rest_server.py ./
+
+# Run server
+CMD ["python", "rest_server.py"]
