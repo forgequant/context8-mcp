@@ -1,6 +1,6 @@
 """
-MCP Server with SSE transport for ChatGPT integration.
-Provides HTTP endpoint with Server-Sent Events.
+SSE (Server-Sent Events) server for ChatGPT MCP integration.
+Provides get_report tool via official MCP SSE transport.
 """
 import asyncio
 import json
@@ -10,12 +10,9 @@ from typing import Any
 
 import redis.asyncio as aioredis
 from mcp.server import Server
+from mcp.server.sse import SseServerTransport
 from mcp.types import Tool, TextContent
-from starlette.applications import Starlette
-from starlette.responses import StreamingResponse
-from starlette.routing import Route
-from starlette.middleware.cors import CORSMiddleware
-import uvicorn
+from starlette.responses import Response
 
 # Configure logging
 logging.basicConfig(
@@ -91,13 +88,12 @@ class RedisCache:
 
 
 class Context8MCPServer:
-    """MCP Server for Context8 market data."""
+    """MCP Server for Context8 market data with ChatGPT-compatible SSE transport."""
 
     def __init__(self, redis_url: str):
         """Initialize MCP server."""
         self.cache = RedisCache(redis_url)
         self.server = Server("context8-mcp")
-        self._register_handlers()
 
     async def initialize(self):
         """Initialize server and connect to Redis."""
@@ -109,7 +105,7 @@ class Context8MCPServer:
         await self.cache.close()
         logger.info("Context8 MCP Server shutdown")
 
-    def _register_handlers(self):
+    def register_handlers(self):
         """Register MCP handlers."""
 
         @self.server.list_tools()
@@ -211,207 +207,99 @@ class Context8MCPServer:
                     }, indent=2)
                 )]
 
-    async def handle_sse_request(self, request):
+    def get_sse_app(self):
         """
-        Handle SSE request with JSON-RPC over SSE.
-        Compatible with ChatGPT MCP integration.
+        Create ASGI app for SSE transport compatible with ChatGPT.
+
+        Returns:
+            ASGI application
         """
-        # Parse JSON-RPC request BEFORE creating the streaming response
-        try:
-            body = await request.json()
-            logger.info(f"SSE request: {body}")
-        except Exception as e:
-            logger.error(f"Failed to parse request body: {e}")
-            from starlette.responses import JSONResponse
-            return JSONResponse(
-                {"jsonrpc": "2.0", "error": {"code": -32700, "message": "Parse error"}},
-                status_code=400
-            )
+        # Create SSE transport with official MCP protocol
+        sse = SseServerTransport("/sse/messages")
 
-        async def event_stream():
-            try:
+        # Create main ASGI app that routes requests
+        async def main_app(scope, receive, send):
+            if scope["type"] != "http":
+                return
 
-                method = body.get("method")
-                params = body.get("params", {})
-                request_id = body.get("id", 1)
+            path = scope.get("path", "")
+            method = scope.get("method", "GET")
 
-                # Handle tools/list
-                if method == "tools/list":
-                    tools = [
-                        {
-                            "name": "get_report",
-                            "description": "Retrieve real-time market data report for a tracked symbol",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {
-                                    "symbol": {
-                                        "type": "string",
-                                        "description": "Trading symbol (e.g., BTCUSDT)",
-                                        "pattern": "^[A-Z0-9]+USDT$"
-                                    }
-                                },
-                                "required": ["symbol"]
-                            }
-                        }
-                    ]
+            logger.info(f"Request: {method} {path}")
 
-                    response = {
-                        "jsonrpc": "2.0",
-                        "id": request_id,
-                        "result": {"tools": tools}
-                    }
+            # Health check endpoint
+            if path == "/health":
+                response = Response(
+                    json.dumps({"status": "healthy", "service": "context8-mcp"}),
+                    media_type="application/json"
+                )
+                await response(scope, receive, send)
 
-                    yield f"data: {json.dumps(response)}\n\n"
+            # SSE connection endpoint (GET only)
+            elif (path == "/sse" or path == "/sse/") and method == "GET":
+                logger.info(f"New SSE connection from {scope.get('client', ['unknown'])[0]}")
+                async with sse.connect_sse(scope, receive, send) as (read_stream, write_stream):
+                    init_options = self.server.create_initialization_options()
+                    await self.server.run(read_stream, write_stream, init_options)
 
-                # Handle tools/call
-                elif method == "tools/call":
-                    tool_name = params.get("name")
-                    arguments = params.get("arguments", {})
+            # SSE messages endpoint (POST only)
+            elif path.startswith("/sse/messages") and method == "POST":
+                logger.info(f"Handling SSE message POST from {scope.get('client', ['unknown'])[0]}")
+                await sse.handle_post_message(scope, receive, send)
 
-                    if tool_name == "get_report":
-                        symbol = arguments.get("symbol")
+            # Handle incorrect POST to /sse or /sse/
+            elif (path == "/sse" or path == "/sse/") and method == "POST":
+                logger.warning(f"POST request to {path} - should POST to /sse/messages instead")
+                response = Response(
+                    json.dumps({"error": "POST should be sent to /sse/messages with session_id parameter"}),
+                    status_code=400,
+                    media_type="application/json"
+                )
+                await response(scope, receive, send)
 
-                        if not symbol:
-                            error_response = {
-                                "jsonrpc": "2.0",
-                                "id": request_id,
-                                "error": {
-                                    "code": -32602,
-                                    "message": "Missing required parameter: symbol"
-                                }
-                            }
-                            yield f"data: {json.dumps(error_response)}\n\n"
-                            return
+            # 404 for other paths
+            else:
+                logger.warning(f"No route matched for {method} {path}")
+                response = Response(f"Not Found: {method} {path}", status_code=404)
+                await response(scope, receive, send)
 
-                        # Get report from cache
-                        report = await self.cache.get_report(symbol)
-
-                        if report is None:
-                            error_response = {
-                                "jsonrpc": "2.0",
-                                "id": request_id,
-                                "error": {
-                                    "code": -32001,
-                                    "message": f"Symbol '{symbol}' not found in cache"
-                                }
-                            }
-                            yield f"data: {json.dumps(error_response)}\n\n"
-                            return
-
-                        # Success response
-                        response = {
-                            "jsonrpc": "2.0",
-                            "id": request_id,
-                            "result": {
-                                "content": [
-                                    {
-                                        "type": "text",
-                                        "text": json.dumps(report, indent=2)
-                                    }
-                                ]
-                            }
-                        }
-
-                        yield f"data: {json.dumps(response)}\n\n"
-                    else:
-                        error_response = {
-                            "jsonrpc": "2.0",
-                            "id": request_id,
-                            "error": {
-                                "code": -32601,
-                                "message": f"Tool '{tool_name}' not found"
-                            }
-                        }
-                        yield f"data: {json.dumps(error_response)}\n\n"
-
-                else:
-                    error_response = {
-                        "jsonrpc": "2.0",
-                        "id": request_id,
-                        "error": {
-                            "code": -32601,
-                            "message": f"Method '{method}' not found"
-                        }
-                    }
-                    yield f"data: {json.dumps(error_response)}\n\n"
-
-            except Exception as e:
-                logger.error(f"Error handling SSE request: {e}", exc_info=True)
-                error_response = {
-                    "jsonrpc": "2.0",
-                    "id": request_id if 'request_id' in locals() else 1,
-                    "error": {
-                        "code": -32603,
-                        "message": f"Internal error: {str(e)}"
-                    }
-                }
-                yield f"data: {json.dumps(error_response)}\n\n"
-
-        return StreamingResponse(
-            event_stream(),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no"
-            }
-        )
-
-    def health_check(self, request):
-        """Health check endpoint."""
-        from starlette.responses import JSONResponse
-        return JSONResponse({"status": "healthy"})
+        return main_app
 
 
-# Global server instance
-mcp_server: Context8MCPServer | None = None
+async def main():
+    """Main entry point for SSE server."""
+    import uvicorn
 
-
-async def startup():
-    """Startup event handler."""
-    global mcp_server
+    # Get Redis URL from environment
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+
+    # Create and initialize server
     mcp_server = Context8MCPServer(redis_url)
     await mcp_server.initialize()
 
+    # Register handlers
+    mcp_server.register_handlers()
 
-async def shutdown():
-    """Shutdown event handler."""
-    global mcp_server
-    if mcp_server:
+    # Get ASGI app
+    app = mcp_server.get_sse_app()
+
+    # Run with uvicorn
+    port = int(os.getenv("PORT", "8080"))
+    config = uvicorn.Config(
+        app,
+        host="0.0.0.0",
+        port=port,
+        log_level="info",
+        access_log=True,
+    )
+    uvicorn_server = uvicorn.Server(config)
+
+    try:
+        logger.info(f"Starting SSE server on http://0.0.0.0:{port}")
+        await uvicorn_server.serve()
+    finally:
         await mcp_server.shutdown()
 
 
-async def sse_endpoint(request):
-    """SSE endpoint handler."""
-    return await mcp_server.handle_sse_request(request)
-
-
-async def health_endpoint(request):
-    """Health check endpoint handler."""
-    return mcp_server.health_check(request)
-
-
-# Create Starlette app
-app = Starlette(
-    routes=[
-        Route("/mcp/sse", sse_endpoint, methods=["POST"]),
-        Route("/health", health_endpoint, methods=["GET"]),
-    ],
-    on_startup=[startup],
-    on_shutdown=[shutdown]
-)
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", "8080"))
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+    asyncio.run(main())
