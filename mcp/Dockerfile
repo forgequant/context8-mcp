@@ -22,8 +22,8 @@ RUN apk --no-cache add ca-certificates wget
 
 WORKDIR /app
 
-# Copy binary from builder
-COPY --from=builder /build/mcp .
+# Copy binary from builder (explicit destination)
+COPY --from=builder /build/mcp ./mcp
 
 # MCP API port
 EXPOSE 8080

@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // TimeoutMiddleware enforces a timeout on all requests.
@@ -85,6 +87,46 @@ type responseWriter struct {
 func (rw *responseWriter) WriteHeader(code int) {
 	rw.statusCode = code
 	rw.ResponseWriter.WriteHeader(code)
+}
+
+// contextKey is a custom type for context keys to avoid collisions
+type contextKey string
+
+const (
+	// CorrelationIDKey is the context key for correlation IDs
+	CorrelationIDKey contextKey = "correlation_id"
+)
+
+// CorrelationIDMiddleware adds a unique correlation ID to each request
+// for distributed tracing. The ID can be extracted using GetCorrelationID.
+//
+// Implements constitution principle 11 (Observability) for request tracing.
+func CorrelationIDMiddleware() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Generate or extract correlation ID
+			correlationID := r.Header.Get("X-Correlation-ID")
+			if correlationID == "" {
+				// Generate new UUID if not provided
+				correlationID = uuid.New().String()
+			}
+
+			// Add to response header for client visibility
+			w.Header().Set("X-Correlation-ID", correlationID)
+
+			// Add to request context for handler access
+			ctx := context.WithValue(r.Context(), CorrelationIDKey, correlationID)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// GetCorrelationID extracts the correlation ID from request context
+func GetCorrelationID(ctx context.Context) string {
+	if id, ok := ctx.Value(CorrelationIDKey).(string); ok {
+		return id
+	}
+	return ""
 }
 
 // HealthCheckHandler returns a simple health check handler.
